@@ -1,0 +1,101 @@
+
+There are no discarded input sections
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+RAM              0x00000000         0x40000000         xrw
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+LOAD main.o
+LOAD arch/Arm-V7/startup.o
+                0x00000000                        . = 0x0
+
+.text           0x00000000       0xa0
+ *(.vectors)
+ .vectors       0x00000000       0x70 arch/Arm-V7/startup.o
+                0x00000000                _vectors
+                0x00000020                _start
+ *(.text)
+ .text          0x00000070       0x30 main.o
+                0x00000070                main
+ .text          0x000000a0        0x0 arch/Arm-V7/startup.o
+ *(.rodata)
+
+.glue_7         0x000000a0        0x0
+ .glue_7        0x000000a0        0x0 linker stubs
+
+.glue_7t        0x000000a0        0x0
+ .glue_7t       0x000000a0        0x0 linker stubs
+
+.vfp11_veneer   0x000000a0        0x0
+ .vfp11_veneer  0x000000a0        0x0 linker stubs
+
+.v4_bx          0x000000a0        0x0
+ .v4_bx         0x000000a0        0x0 linker stubs
+
+.iplt           0x000000a0        0x0
+ .iplt          0x000000a0        0x0 arch/Arm-V7/startup.o
+
+.rel.dyn        0x000000a0        0x0
+ .rel.iplt      0x000000a0        0x0 arch/Arm-V7/startup.o
+
+.data           0x000000a0        0x0
+ *(.data)
+ .data          0x000000a0        0x0 main.o
+ .data          0x000000a0        0x0 arch/Arm-V7/startup.o
+
+.igot.plt       0x000000a0        0x0
+ .igot.plt      0x000000a0        0x0 arch/Arm-V7/startup.o
+
+.bss            0x000000a0        0x0
+                0x000000a0                        . = ALIGN (0x4)
+                0x000000a0                        __bss_start = .
+ *(.bss)
+ .bss           0x000000a0        0x0 main.o
+ .bss           0x000000a0        0x0 arch/Arm-V7/startup.o
+ *(COMMON)
+                0x000000a0                        . = ALIGN (0x4)
+                0x000000a0                        __bss_end = .
+                0x02000000                        _stack_top = 0x2000000
+OUTPUT(kernel.elf elf32-littlearm)
+LOAD linker stubs
+
+.debug_info     0x00000000       0x99
+ .debug_info    0x00000000       0x73 main.o
+ .debug_info    0x00000073       0x26 arch/Arm-V7/startup.o
+
+.debug_abbrev   0x00000000       0x67
+ .debug_abbrev  0x00000000       0x53 main.o
+ .debug_abbrev  0x00000053       0x14 arch/Arm-V7/startup.o
+
+.debug_aranges  0x00000000       0x40
+ .debug_aranges
+                0x00000000       0x20 main.o
+ .debug_aranges
+                0x00000020       0x20 arch/Arm-V7/startup.o
+
+.debug_line     0x00000000       0x9e
+ .debug_line    0x00000000       0x42 main.o
+ .debug_line    0x00000042       0x5c arch/Arm-V7/startup.o
+
+.debug_str      0x00000000       0xeb
+ .debug_str     0x00000000       0xeb main.o
+                                 0xc7 (size before relaxing)
+ .debug_str     0x000000eb       0x5f arch/Arm-V7/startup.o
+
+.comment        0x00000000       0x45
+ .comment       0x00000000       0x45 main.o
+                                 0x46 (size before relaxing)
+
+.ARM.attributes
+                0x00000000       0x37
+ .ARM.attributes
+                0x00000000       0x35 main.o
+ .ARM.attributes
+                0x00000035       0x2d arch/Arm-V7/startup.o
+
+.debug_frame    0x00000000       0x28
+ .debug_frame   0x00000000       0x28 main.o
