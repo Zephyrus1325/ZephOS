@@ -5,21 +5,21 @@
 _vectors:
     B _start                 // 0x00: Reset (Ponto de entrada)
     B . // handler_undef     // 0x04: Instrução indefinida
-    B svc_handler            // 0x08: System Call (SVC)
+    B . // svc_handler       // 0x08: System Call (SVC)
     B . // handler_prefetch  // 0x0C: Erro de instrução
-    B data_abort_handler     // 0x10: Erro de dados (Ex: acesso à memória inválida)
+    B . // data_abort_handler// 0x10: Erro de dados (Ex: acesso à memória inválida)
     .word 0                  // 0x14: Reservado
-    B irq_handler            // 0x18: Interrupções de hardware (Timer, etc)
+    B . //irq_handler        // 0x18: Interrupções de hardware (Timer, etc)
     B . // handler_fiq       // 0x1C: Interrupção rápida
 
 _start:
     /* Configurar pilha para modo IRQ */
     MSR cpsr_c, #0xD2       // Entra no modo IRQ (Interrupções desabilitadas)
-    LDR sp, =0x3F000000     // Define o endereço da pilha de IRQ
+    LDR sp, =__stack_irq_top     // Define o endereço da pilha de IRQ
 
     /* Configurar pilha para modo Supervisor (Kernel) */
     MSR cpsr_c, #0xD3       // Entra no modo SVC
-    LDR sp, =0x40000000     // Define o topo da RAM para a pilha do Kernel
+    LDR sp, =__stack_svc_top     // Define o topo da RAM para a pilha do Kernel
 
     // Zerar as variaveis do kernel
     LDR r0, =__bss_start
@@ -56,106 +56,106 @@ disable_interrupts:
     cpsid i    // Define a máscara de IRQ (Desabilita)
     bx lr
 
-svc_handler:
-    /* No SVC, o LR não precisa de ajuste */
-    push {lr}           /* Salva PC de retorno */
-    mrs r12, spsr
-    push {r12}          /* Salva SPSR (CPSR da tarefa) */
-
-    push {r0-r11, r12}  /* Salva registradores */
-    push {lr}           /* Salva LR original da tarefa */
-
-    ldr r4, =current_task
-    ldr r5, [r4]
-    str sp, [r5, #4]
-
-    bl k_svc_dispatcher
-
-    ldr r4, =current_task
-    ldr r5, [r4]
-    ldr sp, [r5, #4]
-
-    pop {lr}
-    pop {r0-r11, r12}
-    pop {r1}
-    msr spsr_cxsf, r1
-    ldmfd sp!, {pc}^
-
-irq_handler:
-    irq_handler:
-    /* 1. Ajuste do LR para retorno de IRQ */
-    sub lr, lr, #4
-
-    /* 2. Salva temporários para poder mudar de modo */
-    push {r0-r3}
-    mov r0, lr          /* r0 agora guarda o PC de retorno da tarefa */
-    mrs r1, spsr        /* r1 agora guarda o CPSR da tarefa */
-
-    /* 3. Muda para modo SVC para salvar na pilha da tarefa */
-    cps #0x13
-
-    /* 4. Monta o Frame de Contexto (Igual ao SVC) */
-    push {r0}           /* Salva o PC de retorno */
-    push {r1}           /* Salva o SPSR (CPSR da tarefa) */
-    
-    /* 5. Recupera r0-r3 originais que ficaram na pilha IRQ */
-    cps #0x12
-    pop {r0-r3}
-    cps #0x13
-    
-    /* 6. Salva o restante dos registradores */
-    push {r0-r11, r12}
-    push {lr}           /* Salva o LR original da tarefa (R14_usr) */
-
-    /* 7. Salva o SP atual no TCB da tarefa que foi interrompida */
-    ldr r0, =current_task
-    ldr r1, [r0]
-    str sp, [r1, #4]
-
-    /* 8. Chama o tratamento em C (Tick + Scheduler) */
-    bl k_handle_irq
-
-    /* 9. Carrega o SP da nova tarefa (pode ser a Idle ou outra) */
-    ldr r0, =current_task
-    ldr r1, [r0]
-    ldr sp, [r1, #4]
-
-    /* 10. Restaura o Contexto (Simétrico) */
-    pop {lr}
-    pop {r0-r11, r12}
-    pop {r1}            /* r1 = SPSR */
-    msr spsr_cxsf, r1
-    ldmfd sp!, {pc}^           /* Restaura PC e CPSR simultaneamente */
-
-data_abort_handler:
-    // 1. Recuperar o endereço da instrução que falhou (LR - 8)
-    SUB LR, LR, #8
-    
-    // 2. Ler o endereço que causou a falha (DFAR)
-    MRC p15, 0, R0, c6, c0, 0  // R0 = Endereço da falha
-    
-    // 3. Ler o motivo da falha (DFSR)
-    MRC p15, 0, R1, c5, c0, 0  // R1 = Status/Motivo
-    
-    // 4. Passar para uma função C para imprimir bonitinho
-    // O LR (instrução) vai como 3º argumento (R2)
-    MOV R2, LR
-    B k_panic_data_abort
-
-
-.global start_first_task
-start_first_task:
-    /* 9. Carrega o SP da nova tarefa (pode ser a Idle ou outra) */
-    ldr r0, =current_task
-    ldr r1, [r0]
-    ldr sp, [r1, #4]
-
-    /* 10. Restaura o Contexto (Simétrico) */
-    pop {lr}
-    pop {r0-r11, r12}
-    pop {r1}            /* r1 = SPSR */
-    msr spsr_cxsf, r1
-
-    cpsie i
-
-    ldmfd sp!, {pc}^           /* Restaura PC e CPSR simultaneamente */
+//svc_handler:
+//    /* No SVC, o LR não precisa de ajuste */
+//    push {lr}           /* Salva PC de retorno */
+//    mrs r12, spsr
+//    push {r12}          /* Salva SPSR (CPSR da tarefa) */
+//
+//    push {r0-r11, r12}  /* Salva registradores */
+//    push {lr}           /* Salva LR original da tarefa */
+//
+//    ldr r4, =current_task
+//    ldr r5, [r4]
+//    str sp, [r5, #4]
+//
+//    bl k_svc_dispatcher
+//
+//    ldr r4, =current_task
+//    ldr r5, [r4]
+//    ldr sp, [r5, #4]
+//
+//    pop {lr}
+//    pop {r0-r11, r12}
+//    pop {r1}
+//    msr spsr_cxsf, r1
+//    ldmfd sp!, {pc}^
+//
+//irq_handler:
+//    irq_handler:
+//    /* 1. Ajuste do LR para retorno de IRQ */
+//    sub lr, lr, #4
+//
+//    /* 2. Salva temporários para poder mudar de modo */
+//    push {r0-r3}
+//    mov r0, lr          /* r0 agora guarda o PC de retorno da tarefa */
+//    mrs r1, spsr        /* r1 agora guarda o CPSR da tarefa */
+//
+//    /* 3. Muda para modo SVC para salvar na pilha da tarefa */
+//    cps #0x13
+//
+//    /* 4. Monta o Frame de Contexto (Igual ao SVC) */
+//    push {r0}           /* Salva o PC de retorno */
+//    push {r1}           /* Salva o SPSR (CPSR da tarefa) */
+//    
+//    /* 5. Recupera r0-r3 originais que ficaram na pilha IRQ */
+//    cps #0x12
+//    pop {r0-r3}
+//    cps #0x13
+//    
+//    /* 6. Salva o restante dos registradores */
+//    push {r0-r11, r12}
+//    push {lr}           /* Salva o LR original da tarefa (R14_usr) */
+//
+//    /* 7. Salva o SP atual no TCB da tarefa que foi interrompida */
+//    ldr r0, =current_task
+//    ldr r1, [r0]
+//    str sp, [r1, #4]
+//
+//    /* 8. Chama o tratamento em C (Tick + Scheduler) */
+//    bl k_handle_irq
+//
+//    /* 9. Carrega o SP da nova tarefa (pode ser a Idle ou outra) */
+//    ldr r0, =current_task
+//    ldr r1, [r0]
+//    ldr sp, [r1, #4]
+//
+//    /* 10. Restaura o Contexto (Simétrico) */
+//    pop {lr}
+//    pop {r0-r11, r12}
+//    pop {r1}            /* r1 = SPSR */
+//    msr spsr_cxsf, r1
+//    ldmfd sp!, {pc}^           /* Restaura PC e CPSR simultaneamente */
+//
+//data_abort_handler:
+//    // 1. Recuperar o endereço da instrução que falhou (LR - 8)
+//    SUB LR, LR, #8
+//    
+//    // 2. Ler o endereço que causou a falha (DFAR)
+//    MRC p15, 0, R0, c6, c0, 0  // R0 = Endereço da falha
+//    
+//    // 3. Ler o motivo da falha (DFSR)
+//    MRC p15, 0, R1, c5, c0, 0  // R1 = Status/Motivo
+//    
+//    // 4. Passar para uma função C para imprimir bonitinho
+//    // O LR (instrução) vai como 3º argumento (R2)
+//    MOV R2, LR
+//    B k_panic_data_abort
+//
+//
+//.global start_first_task
+//start_first_task:
+//    /* 9. Carrega o SP da nova tarefa (pode ser a Idle ou outra) */
+//    ldr r0, =current_task
+//    ldr r1, [r0]
+//    ldr sp, [r1, #4]
+//
+//    /* 10. Restaura o Contexto (Simétrico) */
+//    pop {lr}
+//    pop {r0-r11, r12}
+//    pop {r1}            /* r1 = SPSR */
+//    msr spsr_cxsf, r1
+//
+//    cpsie i
+//
+//    ldmfd sp!, {pc}^           /* Restaura PC e CPSR simultaneamente */

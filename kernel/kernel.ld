@@ -1,56 +1,89 @@
-/* Define o ponto de entrada como o símbolo _start definido no startup.s */
+/* Define o ponto de entrada do binário */
 ENTRY(_start)
 
+/* Definição das regiões de memória física */
 MEMORY
 {
-    /* Memória Principal (SDRAM) - 1GB */
-    SDRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 1024M
-    
-    /* SRAM do FPGA (Mapeada via HPS Bridge) - 64MB */
-    SRAM  (rwx) : ORIGIN = 0xC0000000, LENGTH = 64M
+    /* RAM na Vexpress-A9 começa em 0x60000000. 
+       Definimos 512MB, mas você pode ajustar conforme o comando -m do QEMU */
+    RAM (rwx) : ORIGIN = 0x60000000, LENGTH = 512M
 }
 
+/* Definição de Símbolos Úteis para o Stack (Pilha) */
+/* O ARM exige pilhas separadas para diferentes modos de exceção */
+_stack_size_svc = 0x4000;    /* 16KB para o modo Supervisor (Main) */
+_stack_size_irq = 0x1000;    /* 4KB para o modo IRQ */
+_stack_size_abt = 0x400;     /* 1KB para Aborts */
 
 SECTIONS
 {
-    /* 1. Código e Dados Estáticos na SDRAM */
-    . = 0x00000000;
+    /* 1. SEÇÃO DE CÓDIGO (.text) */
+    /* Colocamos no início da RAM para facilitar o boot */
+    .text : 
+    {
+        FILL(0x00)
+        __text_start = .;
+        
+        /* A tabela de vetores DEVE estar no início para o processador achar */
+        KEEP(*(.vectors))   
+        
+        *(.text .text.*)     /* Todo o código C e Assembly */
+        *(.rodata .rodata.*) /* Strings e constantes */
+        
+        . = ALIGN(4);
+        __text_end = .;
+    } > RAM
 
-    .text : {
-        KEEP(*(.vectors))
-        *(.text)
-        *(.rodata)
-    } > SDRAM
+    /* 2. SEÇÃO DE DADOS INICIALIZADOS (.data) */
+    /* Variáveis globais como: int x = 10; */
+    .data : 
+    {
+        __data_start = .;
+        *(.data .data.*)
+        . = ALIGN(4);
+        __data_end = .;
+    } > RAM
 
-    .data : {
-        *(.data)
-    } > SDRAM
-
-    .bss : {
+    /* 3. SEÇÃO DE DADOS NÃO INICIALIZADOS (.bss) */
+    /* Variáveis globais como: int y; (Devem ser zeradas no startup.s) */
+    .bss (NOLOAD) : 
+    {
         . = ALIGN(4);
         __bss_start = .;
-        *(.bss)
-        *(COMMON)
+        *(.bss .bss.*)
+        *(COMMON)            /* Itens comuns do compilador */
         . = ALIGN(4);
         __bss_end = .;
-    } > SDRAM
+    } > RAM
 
-    /* 2. Reserva de Espaço para Sistema de Arquivos na SDRAM */
-    /* Vamos colocar após o BSS, reservando 512MB */
-    . = ALIGN(4096); /* Alinha em página para futura MMU */
-    __fs_start = .;
-    . = . + 512M;
-    __fs_end = .;
-
-    /* 3. Definição da Pilha (Stack) no final da SDRAM */
-    /* Colocamos no final da SDRAM para ficar longe do código */
-    _stack_top = ORIGIN(SDRAM) + LENGTH(SDRAM);
-
-    /* 4. HEAP na SRAM (0xC0000000) */
-    .sram_data (NOLOAD) : {
+    /* 4. SEÇÃO DE PILHAS (STACKS) */
+    /* Alinhamento de 8 bytes é obrigatório pela ABI do ARM */
+    .stack (NOLOAD) :
+    {
         . = ALIGN(8);
+        
+        /* Pilha do modo IRQ */
+        __stack_irq_start = .;
+        . = . + _stack_size_irq;
+        __stack_irq_top = .;
+
+        /* Pilha do modo Supervisor (Principal) */
+        __stack_svc_start = .;
+        . = . + _stack_size_svc;
+        __stack_svc_top = .;
+        
+        . = ALIGN(8);
+    } > RAM
+
+    /* 5. HEAP (Memória Dinâmica) */
+    /* Define o que sobrou da RAM para uso com malloc() */
+    .heap (NOLOAD) :
+    {
+        . = ALIGN(4096);     /* Alinhado por página para MMU futura */
         __heap_start = .;
-        /* O limite é o fim da região SRAM */
-        __heap_limit = ORIGIN(SRAM) + LENGTH(SRAM);
-    } > SRAM
+        __heap_end = ORIGIN(RAM) + LENGTH(RAM);
+    } > RAM
+
+    /* Símbolos para debug ou uso no Kernel */
+    _end = .;
 }

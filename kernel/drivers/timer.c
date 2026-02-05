@@ -1,41 +1,31 @@
-#include <stdint.h>
+#include "interrupts.h"
 
-// TODO: Padronizar isso aqui com a organização em struct do UART
+#define TIMER0_BASE 0x10011000
+#define TIMER_LOAD    ((volatile uint32_t *)(TIMER0_BASE + 0x00))
+#define TIMER_INTCLR  ((volatile uint32_t *)(TIMER0_BASE + 0x0C))
+#define TIMER_CONTROL ((volatile uint32_t *)(TIMER0_BASE + 0x08))
 
-// Endereços do ARM Private Timer
-#define TIMER_BASE      0xFFFEC600
-#define TIMER_LOAD      (TIMER_BASE + 0x00)
-#define TIMER_COUNTER   (TIMER_BASE + 0x04)
-#define TIMER_CONTROL   (TIMER_BASE + 0x08)
-#define TIMER_INTERRUPT (TIMER_BASE + 0x0C)
+volatile uint32_t system_ticks = 0;
 
-void timer_clear_irq() {
-    volatile uint32_t *timer_interrupt = (uint32_t *)TIMER_INTERRUPT;
-    *timer_interrupt = 0x1; // Escrever 1 limpa a interrupção (W1C)
+void timer_isr(void) {
+    *TIMER_INTCLR = 1; // Limpa interrupção no hardware do timer
+    system_ticks++;
 }
 
-void timer_init(uint32_t load_value) {
-    volatile uint32_t *timer_load = (uint32_t *)TIMER_LOAD;
-    volatile uint32_t *timer_control = (uint32_t *)TIMER_CONTROL;
-    volatile uint32_t *timer_interrupt = (uint32_t *)TIMER_INTERRUPT;
+void timer_init(uint32_t ms_rate) {
+    // Configura 1ms: 1MHz / 1000 = 1000 ticks
+    *TIMER_LOAD = 1000; 
+    
+    // Timer Control: Enable (7), Periodic (6), Int Enable (5), 32-bit (1)
+    *TIMER_CONTROL = (1 << 7) | (1 << 6) | (1 << 5) | (1 << 1);
 
-    *timer_control = 0;          // Para o timer antes de configurar
-    *timer_load = load_value;    
-    *timer_interrupt = 0x1;      // Limpa qualquer interrupção residual (W1C)
-    *timer_control = 0x7;        // Liga: Enable(0), Auto-reload(1), IRQ-Enable(2)
-    timer_clear_irq();           // Desliga qualquer interrupção anterior
+    config_interrupt(34, timer_isr);
 }
 
-extern void timer_clear_irq();
-extern void k_tick_handler();
-extern void scheduler();
-
-// Função de Callback que o GIC chamará (ID 29)
-void timer_tick_handler() {
-    timer_clear_irq();
-    k_tick_handler();
-    scheduler();
+void delay_ms(uint32_t ms) {
+    uint32_t start = system_ticks;
+    while ((system_ticks - start) < ms) {
+        // Espera ocupada (ou WFI para economizar CPU)
+        __asm__("wfi"); 
+    }
 }
-
-
-
