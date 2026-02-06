@@ -9,52 +9,72 @@ _vectors:
     B . // handler_prefetch  // 0x0C: Erro de instrução
     B . // data_abort_handler// 0x10: Erro de dados (Ex: acesso à memória inválida)
     .word 0                  // 0x14: Reservado
-    B . //irq_handler        // 0x18: Interrupções de hardware (Timer, etc)
+    B irq_handler            // 0x18: Interrupções de hardware (Timer, etc)
     B . // handler_fiq       // 0x1C: Interrupção rápida
 
 _start:
     /* Configurar pilha para modo IRQ */
-    MSR cpsr_c, #0xD2       // Entra no modo IRQ (Interrupções desabilitadas)
-    LDR sp, =__stack_irq_top     // Define o endereço da pilha de IRQ
+    //MSR cpsr_c, #0xD2       // Entra no modo IRQ (Interrupções desabilitadas)
+    //LDR sp, =__stack_irq_top     // Define o endereço da pilha de IRQ
+
+    LDR r0, =0x60000000
+    MCR p15, 0, r0, c12, c0, 0   @ Escreve no VBAR
 
     /* Configurar pilha para modo Supervisor (Kernel) */
-    MSR cpsr_c, #0xD3       // Entra no modo SVC
-    LDR sp, =__stack_svc_top     // Define o topo da RAM para a pilha do Kernel
+    //MSR cpsr_c, #0xD3       // Entra no modo SVC
+    //LDR sp, =__stack_svc_top     // Define o topo da RAM para a pilha do Kernel
 
     // Zerar as variaveis do kernel
-    LDR r0, =__bss_start
-    LDR r1, =__bss_end
-    MOV r2, #0
+    //LDR r0, =__bss_start
+    //LDR r1, =__bss_end
+    //MOV r2, #0
 zero_loop:
-    CMP r0, r1
-    STRLT r2, [r0], #4
-    BLT zero_loop
+    //CMP r0, r1
+    //STRLT r2, [r0], #4
+    //BLT zero_loop
 
 // --- HABILITAR FPU E NEON ---
     // 1. Permitir acesso aos coprocessadores CP10 e CP11
-    mrc p15, 0, r0, c1, c0, 2
-    orr r0, r0, #0x00f00000    // Habilita acesso Full
-    mcr p15, 0, r0, c1, c0, 2
-    isb                        // Barreira de instrução
+    //mrc p15, 0, r0, c1, c0, 2
+    //orr r0, r0, #0x00f00000    // Habilita acesso Full
+    //mcr p15, 0, r0, c1, c0, 2
+    //isb                        // Barreira de instrução
 
     // 2. Ligar a unidade NEON/VFP (bit 30 do FPEXC)
-    mov r0, #0x40000000
-    vmsr fpexc, r0             // Se falhar aqui, use: mcr p10, 7, r0, cr8, cr0, 0
+    //mov r0, #0x40000000
+    //vmsr fpexc, r0             // Se falhar aqui, use: mcr p10, 7, r0, cr8, cr0, 0
 
     BL main
     B .  // Caso a main retorne, trava em loop infinito
 
 .section .text
-.global enable_interrupts
-.global disable_interrupts
+.global k_enable_interrupts
+.global k_disable_interrupts
 
-enable_interrupts:
+k_enable_interrupts:
+    push {lr}
     cpsie i    // Limpa a máscara de IRQ (Habilita)
+    pop {pc}
     bx lr
 
-disable_interrupts:
+k_disable_interrupts:
     cpsid i    // Define a máscara de IRQ (Desabilita)
     bx lr
+
+irq_handler:
+    /* No modo IRQ, o LR contém o endereço de retorno + 4 */
+    sub lr, lr, #4
+
+    /* Salva o contexto no Stack de IRQ */
+    /* Salvamos r0-r12 (registradores de uso geral) e o LR (retorno) */
+    stmfd sp!, {r0-r12, lr}
+
+    /* Chama a função em C */
+    bl k_irq_handler
+
+    /* Restaura o contexto e retorna */
+    /* O sufixo ^ indica que o SPSR deve ser movido para o CPSR (restaura flags) */
+    ldmfd sp!, {r0-r12, pc}^
 
 //svc_handler:
 //    /* No SVC, o LR não precisa de ajuste */

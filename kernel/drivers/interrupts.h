@@ -1,17 +1,11 @@
 #ifndef INTERRUPTS_H
 #define INTERRUPTS_H
 
-#include <stdint.h>
+void k_setup_interrupts();
 
-// Endereços GIC VExpress-A9
-#define GIC_CPU_BASE    0x10000100
-#define GIC_DIST_BASE   0x10001000
+extern void k_enable_interrupts();
+extern void k_disable_interrupts();
 
-#define GICC_IAR        ((volatile uint32_t *)(GIC_CPU_BASE + 0x00C))
-#define GICC_EOIR       ((volatile uint32_t *)(GIC_CPU_BASE + 0x010))
+#include "drivers/Express-A9/Express-A9_interrupts.h"
 
-void gic_init(void);
-void config_interrupt(int N, void (*ISR)());
-void k_irq_handler(void); // Chamada pelo assembly
-
-#endif
+#endif // INTERRUPTS_H

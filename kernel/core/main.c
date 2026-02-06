@@ -4,11 +4,13 @@
 
 
 void main(){
-    gic_init();
-    timer_init(10000);
+    k_setup_uart();
+    k_setup_interrupts();
+    k_setup_timers();
+    k_enable_interrupts();
     k_uart_print("Hello World\n\r");
     while(1){
         k_uart_print("Hewo\n\r");
-        delay_ms(1000);
+        k_delay_ms(1000);
     }
 }
