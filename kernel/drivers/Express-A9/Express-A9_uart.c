@@ -1,4 +1,5 @@
 #include "drivers/uart.h"
+#include "drivers/Express-A9/Express-A9_uart.h"
 #include <stdint.h>
 
 
@@ -28,3 +29,11 @@ void k_uart_print(char* s){
         k_uart_putc(*s++);
     }
 }   
+
+void k_uart_print_hex(unsigned int val){
+    char hex_chars[] = "0123456789ABCDEF";
+    k_uart_print("0x");
+    for (int i = 28; i >= 0; i -= 4) {
+        k_uart_putc(hex_chars[(val >> i) & 0xF]);
+    }
+}
