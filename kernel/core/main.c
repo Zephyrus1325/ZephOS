@@ -11,8 +11,8 @@ void task1(){
     k_uart_print("CARLOS\n\r");
     k_uart_print("Hello World from task 5\n\r");
     while(1){
-        k_uart_print("Hello World from task 2\n\r");
-        msleep(1000);
+        //k_uart_print("Hello World from task 2\n\r");
+        //sys_msleep(1000);
     }
 }
 
@@ -20,8 +20,15 @@ void task2(){
     k_uart_print("CARLOS 2\n\r");
     k_uart_print("Hello World from task number 5\n\r");
     while(1){
-        k_uart_print("Hello Again!\n\r");
-        msleep(200);
+        //int32_t c = sys_getc();
+        //
+        //if(c != -1){
+        //    k_uart_putc(c);
+        //}
+        ////k_uart_print("Hello Again!\n\r");
+        //k_uart_print_hex(c);
+        //k_uart_print("\n\r");
+        sys_msleep(200);
     }
 }
 

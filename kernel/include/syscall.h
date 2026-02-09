@@ -2,9 +2,10 @@
 #define SYSCALL_H
 
 #define SYS_WRITE    1
-#define SYS_GETPID   2
-#define SYS_YIELD    3
-#define SYS_SLEEP    4
+#define SYS_GETCHAR  2
+#define SYS_GETPID   3
+#define SYS_YIELD    4
+#define SYS_SLEEP    5
 #define SYS_SPAWN    6
 #define SYS_CREATE_DIRECTORY // char* directory
 #define SYS_REMOVE_DIRECTORY // char* directory
@@ -24,8 +25,9 @@
 
 #include <stdint.h>
 
-int32_t spawn(void (*func)(void));
-void msleep(uint32_t ms);
+int32_t sys_spawn(void (*func)(void));
+void sys_msleep(uint32_t ms);
 void sys_write(char *msg);
+int32_t sys_getc();
 
 #endif

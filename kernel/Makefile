@@ -7,8 +7,8 @@ AS = arm-none-eabi-as
 
 # Flags (Sincronizadas com o CPULator)
 CFLAGS = -mcpu=cortex-a9 -mfloat-abi=softfp -mfpu=neon-fp16 \
-         -ffreestanding -nostdlib -g -O0 -I. -Wl,--no-warn-rwx-segments
-			
+         -ffreestanding -nostdlib -g -O0 -I. 
+			# -Wl, --no-warn-rwx-segments
 ASFLAGS =  -march=armv7-a -mcpu=cortex-a9 -mfpu=neon-fp16 -mfloat-abi=softfp --gdwarf2
 
 # Localizar fontes (Kernel e subpastas)

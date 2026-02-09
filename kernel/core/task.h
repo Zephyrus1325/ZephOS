@@ -37,6 +37,7 @@ void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* sta
 void k_idle_task_init(void);
 int k_task_create(void (*entry_point)(void), size_t stack_size);
 void k_tick_handler(void);
+uint32_t k_get_current_task_id(void);
 void scheduler();
 
 #endif
