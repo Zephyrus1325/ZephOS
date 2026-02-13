@@ -4,34 +4,63 @@
 #include "core/task.h"
 #include "core/memory.h"
 #include "include/syscall.h"
+#include "drivers/ps2.h"
+
+#include "drivers/lcd.h"
 
 extern void start_first_task(void);
 
 void task1(){
     //k_uart_print("CARLOS\n\r");
     //k_uart_print("Hello World from task 5\n\r");
+    //int b = 0;
     while(1){
-        k_uart_print("Hello World from task 1\n\r");
-        msleep(1000);
+        //sys_printf("1 - %d\n\r", b += 2);
+        sys_msleep(100000);
     }
 }
 
 void task2(){
     //k_uart_print("CARLOS 2\n\r");
-    //k_uart_print("Hello World from task number 5\n\r");
+    //k_uart_print("Hello World     from task number 5\n\r");
+    char c = 'a';
     while(1){
-        k_uart_print("Hello Again!\n\r");
-        msleep(200);
+        int32_t temp = sys_getc();
+        if(temp != -1){
+            if(temp == '\b'){
+                sys_write("\b ");
+            }
+            sys_putc((char)temp);
+        }
+        //sys_printf("%d\n\r", c);
+        sys_msleep(10);
     }
 }
 
 void main(){
     k_setup_uart();
+    k_uart_print("UART OK.\n\r");
+
     k_setup_interrupts();
+    k_uart_print("INTERRUPTS OK.\n\r");
+
     k_setup_timers();
+    k_uart_print("TIMERS OK.\n\r");
+
+    k_setup_ps2();
+    k_uart_print("PS/2 OK.\n\r");
+
     k_heap_init();
+    k_uart_print("HEAP OK.\n\r");
+
+    k_setup_lcd();
+    clear_screen(0x000000);
+    k_uart_print("LCD DISPLAY OK.\n\r");
+
     k_idle_task_init();
+    k_uart_print("IDLE TASK OK.\n\r");
     
+    k_uart_print("\n\rSETUP COMPLETE.\n\r");
     k_task_create(task1, 1024);
     k_task_create(task2, 1024);
     k_uart_printf("tasks running: %d\n\r", task_count);

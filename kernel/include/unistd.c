@@ -18,13 +18,32 @@ int32_t syscall(int32_t num, uint32_t a1, uint32_t a2, uint32_t a3) {
     return ret;
 }
 
-int32_t spawn(void (*func)(void)) {
+int32_t sys_spawn(void (*func)(void)) {
     return syscall(SYS_SPAWN, (uint32_t)func, 0, 0);
 }
 
-void msleep(uint32_t ms) {
+void sys_msleep(uint32_t ms) {
     syscall(SYS_SLEEP, ms, 0, 0);
 }
 
-// Funções amigáveis
-void sys_write(char *msg) { syscall(SYS_WRITE, (uint32_t)msg, 0, 0); }
+
+void sys_write(char *msg) {
+    syscall(SYS_WRITE, (uint32_t)msg, 0, 0); 
+}
+
+void sys_putc(char c) {
+    syscall(SYS_PUTC, (uint32_t)c, 0, 0); 
+}
+
+void sys_printf(char *fmt, ...){
+    va_list args;
+    va_start(args, fmt);
+    
+    k_vprintf_internal(sys_putc, fmt, args);
+    
+    va_end(args);
+}
+
+int32_t sys_getc() {
+    return syscall(SYS_GETCHAR, 0, 0, 0);
+}

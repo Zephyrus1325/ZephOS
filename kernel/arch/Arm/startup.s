@@ -80,6 +80,8 @@ svc_handler:
     ldr r5, [r4]
     ldr sp, [r5, #4]
 
+    str r0, [sp, #4]
+
     pop {lr}
     pop {r0-r11, r12}
     pop {r1}
