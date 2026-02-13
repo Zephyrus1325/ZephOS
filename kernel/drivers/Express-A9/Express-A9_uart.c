@@ -37,3 +37,23 @@ void k_uart_print_hex(unsigned int val){
         k_uart_putc(hex_chars[(val >> i) & 0xF]);
     }
 }
+
+#include <stdarg.h>
+
+extern void k_disable_interrupts(); 
+extern void k_enable_interrupts(); 
+typedef void (*putc_func_t)(char);
+extern void k_vprintf_internal(putc_func_t putc_func, const char *fmt, va_list args);
+
+void k_uart_printf(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    
+    // UART geralmente é atômica por caractere, mas para mensagens 
+    // completas não misturarem, mantemos o lock.
+    k_disable_interrupts();
+    k_vprintf_internal(k_uart_putc, fmt, args);
+    k_enable_interrupts();
+    
+    va_end(args);
+}
