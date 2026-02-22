@@ -7,6 +7,4 @@ void k_uart_print(char* s);
 void k_uart_print_hex(unsigned int value);
 void k_uart_printf(char* s, ...);
 
-//#include "drivers/Express-A9/Express-A9_uart.h"
-
 #endif // UART_H

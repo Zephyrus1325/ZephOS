@@ -4,15 +4,16 @@
 #include "core/task.h"
 #include "drivers/uart.h"
 
-/**
- * k_svc_dispatcher
- * Esta função é chamada pelo Assembly (svc_handler)
- * R0 -> id
- * R1 -> arg1
- * R2 -> arg2
- * R3 -> arg3
- */
+/*
+    Esta função é chamada pelo Assembly (svc_handler)
 
+    @param R0 id
+    @param R1 arg1
+    @param R2 arg2
+    @param R3 arg3
+
+    @return Retorno da syscall, ou código de sucesso/falha
+*/
 int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
     switch (id) {
         
@@ -48,7 +49,7 @@ int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg
 
         default:
             /* Caso a tarefa peça algo que não existe */
-            k_uart_print("Kernel Error: Unknown Syscall ID: 0x");
+            k_uart_print("[Kernel] Error: Unknown Syscall ID: 0x");
             k_uart_print_hex(id);
             k_uart_print("\n\r");
             return -1;

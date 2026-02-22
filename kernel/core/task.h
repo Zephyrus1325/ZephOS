@@ -16,28 +16,31 @@ typedef struct {
     uint32_t cpsr; // Status do processador
 } context_t;
 
+// Status da tarefa
 typedef enum {
     TASK_READY,
-    TASK_SLEEPING
+    TASK_SLEEPING,
+    TASK_WAITING_IO,
 } task_state_t;
 
 typedef struct {
     uint32_t id;
     uint32_t sp;
-    task_state_t state;    // Novo: Estado da tarefa
-    uint32_t sleep_ticks;  // Novo: Quantos ticks faltam
+    task_state_t state;    // Estado da tarefa
+    uint32_t sleep_ticks;  // Quantos ticks faltam
     uint32_t* stack_base;
 } tcb_t;
 
 extern tcb_t task_table[MAX_TASKS];
-extern unsigned int task_count;
+extern uint32_t task_count;
 extern tcb_t* current_task;
 
 void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* stack_mem, uint32_t stack_size);
-void k_idle_task_init(void);
-int k_task_create(void (*entry_point)(void), size_t stack_size);
-void k_tick_handler(void);
-uint32_t k_get_current_task_id(void);
 void scheduler();
+int32_t k_task_create(void (*entry_point)(void), size_t stack_size);
+uint32_t k_get_current_task_id(void);
+void k_idle_task_init(void);
+void k_tick_handler(void);
+
 
 #endif

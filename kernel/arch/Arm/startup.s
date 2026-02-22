@@ -7,21 +7,23 @@ _vectors:
     B . // handler_undef     // 0x04: Instrução indefinida
     B svc_handler            // 0x08: System Call (SVC)
     B . // handler_prefetch  // 0x0C: Erro de instrução
-    B . // data_abort_handler// 0x10: Erro de dados (Ex: acesso à memória inválida)
+    B data_abort_handler     // 0x10: Erro de dados (Ex: acesso à memória inválida)
     .word 0                  // 0x14: Reservado
     B irq_handler            // 0x18: Interrupções de hardware (Timer, etc)
     B . // handler_fiq       // 0x1C: Interrupção rápida
 
+.section .text
+
 _start:
     /* Configurar pilha para modo IRQ */
-    MSR cpsr_c, #0xD2       // Entra no modo IRQ (Interrupções desabilitadas)
+    MSR cpsr_c, #0xD2            // Entra no modo IRQ (Interrupções desabilitadas)
     LDR sp, =__stack_irq_top     // Define o endereço da pilha de IRQ
 
     LDR r0, =0x60000000
-    MCR p15, 0, r0, c12, c0, 0   @ Escreve no VBAR
+    MCR p15, 0, r0, c12, c0, 0   // Escreve no VBAR (Vector Base Address)
 
     /* Configurar pilha para modo Supervisor (Kernel) */
-    MSR cpsr_c, #0xD3       // Entra no modo SVC
+    MSR cpsr_c, #0xD3            // Entra no modo SVC
     LDR sp, =__stack_svc_top     // Define o topo da RAM para a pilha do Kernel
 
     // Zerar as variaveis do kernel
@@ -44,22 +46,8 @@ zero_loop:
     //mov r0, #0x40000000
     //vmsr fpexc, r0             // Se falhar aqui, use: mcr p10, 7, r0, cr8, cr0, 0
 
-    BL main
-    B .  // Caso a main retorne, trava em loop infinito
-
-.section .text
-.global k_enable_interrupts
-.global k_disable_interrupts
-
-k_enable_interrupts:
-    push {lr}
-    cpsie i    // Limpa a máscara de IRQ (Habilita)
-    pop {pc}
-    bx lr
-
-k_disable_interrupts:
-    cpsid i    // Define a máscara de IRQ (Desabilita)
-    bx lr
+    BL main                      // Rodar a Main em C
+    B .                          // Caso a Main retorne, trava em loop infinito
 
 svc_handler:
     /* No SVC, o LR não precisa de ajuste */

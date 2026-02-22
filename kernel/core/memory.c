@@ -14,21 +14,27 @@ void k_heap_init() {
     free_list->next = NULL;
 }
 
+
+/*
+    Aloca um bloco de memória dentro do Heap
+    
+    @param  size Número de bytes a serem alocados
+    @return Ponteiro para o início do bloco alocado, retorna NULL em caso de erro
+*/
 void* k_malloc(size_t size) {
     // 1. Alinhamento de 8 bytes
     size = (size + 7) & ~7;
 
-    // 2. Bloquear interrupções (Seção Crítica)
-    // Aqui deves usar uma função que desative o IRQ no CPSR
-    //disable_interrupts(); 
+    k_disable_interrupts(); // Desabilitar interrupções para evitar race condition
 
     block_header_t *curr = free_list;
 
-    // 3. Procurar o primeiro bloco livre que sirva (First Fit)
+
+    // Procurar o primeiro bloco livre que sirva (First Fit)
     while (curr) {
         if (curr->is_free && curr->size >= size) {
             
-            // 4. Se o bloco for muito maior que o necessário, dividi-lo (Split)
+            // Se o bloco for muito maior que o necessário, dividi-lo (Split)
             if (curr->size > (size + HEADER_SIZE + 8)) {
                 block_header_t *next_block = (block_header_t *)((uint8_t *)curr + HEADER_SIZE + size);
                 next_block->size = curr->size - size - HEADER_SIZE;
@@ -40,26 +46,32 @@ void* k_malloc(size_t size) {
             }
 
             curr->is_free = 0;
-            //enable_interrupts();
+
+            k_enable_interrupts();   // Reativa Interrupções
             return (void *)((uint8_t *)curr + HEADER_SIZE);
         }
         curr = curr->next;
     }
 
-    //enable_interrupts();
+    k_enable_interrupts();  // Reativa Interrupções
     return NULL; // Sem memória
 }
 
+
+/* 
+    Libera um bloco de memória
+
+    @param *ptr ponteiro para o início do bloco a ser liberado
+*/
 void k_free(void *ptr) {
     if (!ptr) return;
 
-    //disable_interrupts();
+    k_disable_interrupts();   // Desabilitar interrupções para evitar race condition
 
     // 1. Encontrar o header do bloco
     block_header_t *header = (block_header_t *)((uint8_t *)ptr - HEADER_SIZE);
     header->is_free = 1;
 
-    // 2. Coalescência (Opcional mas recomendado): 
     // Juntar blocos livres adjacentes para evitar fragmentação
     block_header_t *curr = free_list;
     while (curr && curr->next) {
@@ -71,16 +83,19 @@ void k_free(void *ptr) {
         }
     }
 
-    //enable_interrupts();
+    k_enable_interrupts();
 }
 
-/* Retorna o total de bytes livres no Heap */
+
+/* 
+    Retorna o total de bytes livres no Heap 
+
+    @return Número de bytes livres
+*/
 size_t k_get_free_heap() {
     size_t total_free = 0;
     
-    // É vital desabilitar interrupções se houver chance de outra task
-    // chamar k_malloc ou k_free enquanto percorremos a lista.
-    k_disable_interrupts(); 
+    k_disable_interrupts(); // Desabilitar interrupções para evitar race condition
 
     block_header_t *curr = free_list;
     while (curr) {
@@ -108,11 +123,17 @@ size_t k_get_free_heap_no_interrupt() {
     return total_free;
 }
 
-/* Retorna o maior bloco contínuo disponível (importante para saber se um malloc grande vai falhar) */
+
+/* 
+    Retorna o maior bloco contínuo disponível (importante para saber se um malloc grande vai falhar) 
+
+    @return Tamanho do maior bloco livre em bytes
+*/
 size_t k_get_max_free_block() {
     size_t max_block = 0;
     
     k_disable_interrupts();
+
     block_header_t *curr = free_list;
     while (curr) {
         if (curr->is_free && curr->size > max_block) {
@@ -120,6 +141,7 @@ size_t k_get_max_free_block() {
         }
         curr = curr->next;
     }
+
     k_enable_interrupts();
     return max_block;
 }

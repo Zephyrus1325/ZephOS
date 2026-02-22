@@ -12,10 +12,11 @@ typedef struct block_header {
 
 #define HEADER_SIZE sizeof(block_header_t)
 
-extern void k_heap_init();
-extern void* k_malloc(size_t size);
-extern void k_free(void *ptr);
-extern size_t k_get_free_heap();
-extern size_t k_get_max_free_block();
-extern size_t k_get_free_heap_no_interrupt();
+void k_heap_init();
+void* k_malloc(size_t size);
+void k_free(void *ptr);
+size_t k_get_free_heap();
+size_t k_get_max_free_block();
+size_t k_get_free_heap_no_interrupt();
+
 #endif
