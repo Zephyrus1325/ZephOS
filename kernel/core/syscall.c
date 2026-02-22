@@ -30,10 +30,9 @@ int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg
 
         case SYS_GETCHAR:
             // Tenta pegar o caractere da FIFO
-            int c = k_fifo_get();
             // Se não tiver nada, retorna -1 para o usuário
             // O programa de usuário pode então decidir se faz um Yield ou espera
-            return (int32_t)c;
+            return (int32_t) k_fifo_get();
         case SYS_GETPID:
             /* Retorna o ID da tarefa atual para ser lido no R0 do usuário */
             return (int32_t)k_get_current_task_id();

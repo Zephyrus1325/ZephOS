@@ -8,6 +8,8 @@
 
 #include "drivers/lcd.h"
 
+#include "drivers/sd.h"
+
 extern void start_first_task(void);
 
 void task1(){
@@ -52,6 +54,18 @@ void main(){
 
     k_heap_init();
     k_uart_print("HEAP OK.\n\r");
+
+    if (!k_sd_init()) {
+        uint8_t sector0[512];
+        k_sd_read_sector(0, sector0);
+        if (sector0[510] == 0x55 && sector0[511] == 0xAA) {
+            k_uart_print("SD CARD OK.\r\n");
+        } else {
+            k_uart_print("SD CARD - INVALID BOOT SECTOR ERROR.\r\n");
+        }
+    } else {
+        k_uart_print("SD FAILED. \n\r");
+    }
 
     k_setup_lcd();
     clear_screen(0x000000);
