@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "core/task.h"
 #include "drivers/uart.h"
+#include "core/fifo.h"
 
 /*
     Esta função é chamada pelo Assembly (svc_handler)
@@ -22,10 +23,17 @@ int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg
             k_uart_print((char *)arg1);
             return 0; // Sucesso
 
-        case SYS_GETCHAR:
-            // Se o buffer está vazio
-            return -1;
+        case SYS_PUTC:
+            /* arg1 contém o ponteiro para a string na memória da tarefa */
+            k_uart_putc((char) arg1);
+            return 0; // Sucesso
 
+        case SYS_GETCHAR:
+            // Tenta pegar o caractere da FIFO
+            int c = k_fifo_get();
+            // Se não tiver nada, retorna -1 para o usuário
+            // O programa de usuário pode então decidir se faz um Yield ou espera
+            return (int32_t)c;
         case SYS_GETPID:
             /* Retorna o ID da tarefa atual para ser lido no R0 do usuário */
             return (int32_t)k_get_current_task_id();

@@ -31,6 +31,19 @@ void sys_write(char *msg) {
     syscall(SYS_WRITE, (uint32_t)msg, 0, 0); 
 }
 
+void sys_putc(char c) {
+    syscall(SYS_PUTC, (uint32_t)c, 0, 0); 
+}
+
+void sys_printf(char *fmt, ...){
+    va_list args;
+    va_start(args, fmt);
+    
+    k_vprintf_internal(sys_putc, fmt, args);
+    
+    va_end(args);
+}
+
 int32_t sys_getc() {
     return syscall(SYS_GETCHAR, 0, 0, 0);
 }
