@@ -101,6 +101,34 @@ int32_t k_task_create(void (*entry_point)(void), size_t stack_size) {
     return new_tcb->id;
 }
 
+/*
+    Cria uma tarefa nova tarefa
+
+    @param *entry_point Ponteiro para função da nova tarefa
+    @param stack_size Tamanho do stack da nova tarefa, em bytes
+
+    @return ID da nova função ou código de erro
+*/
+int32_t k_task_create_no_interrupt(void (*entry_point)(void), size_t stack_size) {
+    if (task_count >= MAX_TASKS) return -1;
+
+    // Aloca memória para a pilha da nova task no HEAP
+    // STACK_SIZE * 4 porque malloc geralmente recebe tamanho em bytes
+    uint32_t *new_stack = (uint32_t *)k_malloc_no_interrupt(stack_size * sizeof(uint32_t));
+
+    if (new_stack == NULL){
+        k_uart_print("[KERNEL] ERROR CREATING TASK: OUT OF MEMORY\n\r");
+        return -2;
+    } // Erro: Out of Memory na SRAM
+
+    tcb_t *new_tcb = &task_table[task_count];
+
+    // Inicializa passando o ponteiro do Heap
+    k_task_init(new_tcb, task_count + 1, entry_point, new_stack, stack_size);
+
+    task_count++;
+    return new_tcb->id;
+}
 
 /*
     Retorna o id da tarefa atual
@@ -130,7 +158,7 @@ void idle_task_func(){
     Configura e inicia a Idle task 
 */
 void k_idle_task_init(void) {
-    uint32_t *idle_stack = (uint32_t *)k_malloc(64 * sizeof(uint32_t));
+    uint32_t *idle_stack = (uint32_t *)k_malloc_no_interrupt(64 * sizeof(uint32_t));
     k_task_init(&idle_task_tcb, 0, idle_task_func, idle_stack, 64);
     idle_task_tcb.state = TASK_READY;
 }

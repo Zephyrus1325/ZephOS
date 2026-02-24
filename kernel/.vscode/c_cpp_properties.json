@@ -23,13 +23,12 @@
                 "UNICODE",
                 "_UNICODE"
             ],
-            "compilerPath": "arm-none-eabi-gcc.exe",
+            "compilerPath": "C:\\Users\\G7UD\\Documents\\Programacao\\gcc-arm-none-eabi-10.3-2021.10\\bin\\arm-none-eabi-gcc.exe",
             "compilerArgs": [
                 "-mcpu=cortex-a9 ",
                 "-mfloat-abi=softfp ",
                 "-mfpu=neon-fp16 \\",
-                "-ffreestanding ",
-                "-nostdlib -g -O0 -I. "
+                "-ffreestanding -g -O0 -I. "
             ]
         }
     ],

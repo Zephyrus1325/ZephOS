@@ -58,16 +58,16 @@ void k_irq_handler(void) {
 */
 void k_panic_data_abort(uint32_t addr, uint32_t status, uint32_t pc) {
     k_uart_print("\n\r[KERNEL]: PANIC - DATA ABORT\n\r");
-    k_uart_print("AT INSTRUCTION: ");
-    k_uart_print_hex(pc);
+    k_uart_printf("AT INSTRUCTION: 0x%x\n\r", pc);
+    //k_uart_print_hex(pc);
     
-    k_uart_print("\nTRIED TO ACCESS: ");
-    k_uart_print_hex(addr);
+    k_uart_printf("\nTRIED TO ACCESS: 0x%x\n\r", addr);
+    //k_uart_print_hex(addr);
     
-    k_uart_print("\n\rStatus (DFSR): ");
-    k_uart_print_hex(status);
+    k_uart_printf("\n\rStatus (DFSR): %x\n\r", status);
+    //k_uart_print_hex(status);
     
-    k_uart_print("\n\rSISTEM HALTED.");
+    k_uart_printf("\n\rSISTEM HALTED.");
     while(1); // Trava o sistema para debug
 }
 

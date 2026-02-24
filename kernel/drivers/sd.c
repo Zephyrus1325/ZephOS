@@ -30,14 +30,14 @@ int k_sd_init(void) {
     
     // 4. ACMD41: Inicialização e Verificação de Voltagem
     // Como é um ACMD, precisamos enviar CMD55 antes
-    int retry = 1000;
-    while(retry--) {
+    //int retry = 1000;
+    //while(retry--) {
         sd_send_cmd(CMD55, 0, 0x40);
         sd_send_cmd(ACMD41, 0x40100000, 0x40); // HCS + 3.3V
         
-        if (*MMCI_RESPONSE0 & (1 << 31)) break; // Bit Busy: 1 = Pronto
-    }
-    if (retry <= 0) return -1;
+        //if (*MMCI_RESPONSE0 & (1 << 31)) break; // Bit Busy: 1 = Pronto
+    //}
+    //if (retry <= 0) {k_uart_print("DESISTO\n\r"); return -1;};
 
     // 5. CMD2: Ask for CID (Identificação Única)
     sd_send_cmd(2, 0, 0x40 | (1 << 6)); // Resposta longa (R2)
@@ -56,7 +56,7 @@ int k_sd_init(void) {
 
     // 9. Aumentar o Clock para velocidade de operação (25MHz ou mais)
     *MMCI_CLOCK = 0xC7; 
-
+    //k_uart_print("SD FEITO UAI\n\r");
     return 0;
 }
 
@@ -73,24 +73,20 @@ int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
     // 2. CMD17: Read Single Block
     // No QEMU, para SDHC (imagens > 2GB ou formatadas modernas), o arg é o LBA.
     // Se não funcionar, tente (lba * 512).
-    if (sd_send_cmd(CMD17, lba, 0x40)) return -1;
-
+    if (sd_send_cmd(CMD17, lba*512, 0x40) != 0) return -1;
+    
     // 3. Leitura da FIFO (Polling)
     int words_read = 0;
     int safety_timeout = 1000000;
     while (words_read < 128 && safety_timeout > 0) {
         uint32_t status = *MMCI_STATUS;
-        
         // Bit 21: RXDATAAVL (Existem dados para ler na FIFO)
         if (status & (1 << 21)) {
             dest[words_read++] = *MMCI_FIFO;
         }
-
         // Checar erros de CRC ou Timeout de dados
         if (status & ((1 << 1) | (1 << 3))) return -1;
-        
         safety_timeout--;
     }
-
     return 0;
 }

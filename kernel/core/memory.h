@@ -14,6 +14,7 @@ typedef struct block_header {
 
 void k_heap_init();
 void* k_malloc(size_t size);
+void* k_malloc_no_interrupt(size_t size);
 void k_free(void *ptr);
 size_t k_get_free_heap();
 size_t k_get_max_free_block();

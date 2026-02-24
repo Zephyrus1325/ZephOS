@@ -57,6 +57,44 @@ void* k_malloc(size_t size) {
     return NULL; // Sem memória
 }
 
+/*
+    Aloca um bloco de memória dentro do Heap
+    
+    @param  size Número de bytes a serem alocados
+    @return Ponteiro para o início do bloco alocado, retorna NULL em caso de erro
+*/
+void* k_malloc_no_interrupt(size_t size) {
+    // 1. Alinhamento de 8 bytes
+    size = (size + 7) & ~7;
+
+    block_header_t *curr = free_list;
+
+
+    // Procurar o primeiro bloco livre que sirva (First Fit)
+    while (curr) {
+        if (curr->is_free && curr->size >= size) {
+            
+            // Se o bloco for muito maior que o necessário, dividi-lo (Split)
+            if (curr->size > (size + HEADER_SIZE + 8)) {
+                block_header_t *next_block = (block_header_t *)((uint8_t *)curr + HEADER_SIZE + size);
+                next_block->size = curr->size - size - HEADER_SIZE;
+                next_block->is_free = 1;
+                next_block->next = curr->next;
+
+                curr->size = size;
+                curr->next = next_block;
+            }
+
+            curr->is_free = 0;
+
+            return (void *)((uint8_t *)curr + HEADER_SIZE);
+        }
+        curr = curr->next;
+    }
+
+    return NULL; // Sem memória
+}
+
 
 /* 
     Libera um bloco de memória

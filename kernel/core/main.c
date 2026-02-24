@@ -9,33 +9,37 @@
 #include "drivers/lcd.h"
 
 #include "drivers/sd.h"
+#include "core/filesystem.h"
 
 extern void start_first_task(void);
 
 void task1(){
-    //k_uart_print("CARLOS\n\r");
-    //k_uart_print("Hello World from task 5\n\r");
-    //int b = 0;
+    k_uart_print("HEY!\n\rArquivos!\n\r");
+    
+    //file_t f;
+    //int status = k_fs_open("teste.txt", &f);
+    //k_uart_printf("%d\n\r", status);
+    //k_uart_printf("0x%d\n\r", (unsigned int)f.buffer);
+    //if(k_fs_open("teste.txt", &f)){
+    //    k_uart_print("Abri o arquivo...\n\r");
+    //    k_uart_printf("0x%x\n\r", f.buffer);
+    //} else {
+    //    k_uart_print("NAO FOI AAAAAAAA\n\r");
+    //}
+    
+
+    
     while(1){
-        //sys_printf("1 - %d\n\r", b += 2);
-        sys_msleep(100000);
+        //sys_printf("[PROG A]: %d\n\r", a++);
+        sys_msleep(999999);
     }
 }
 
 void task2(){
-    //k_uart_print("CARLOS 2\n\r");
-    //k_uart_print("Hello World     from task number 5\n\r");
-    char c = 'a';
+    
     while(1){
-        int32_t temp = sys_getc();
-        if(temp != -1){
-            if(temp == '\b'){
-                sys_write("\b ");
-            }
-            sys_putc((char)temp);
-        }
-        //sys_printf("%d\n\r", c);
-        sys_msleep(10);
+        //sys_printf("[PROG B]: %d\n\r", b++);
+        sys_msleep(1000);
     }
 }
 
@@ -55,17 +59,8 @@ void main(){
     k_heap_init();
     k_uart_print("HEAP OK.\n\r");
 
-    if (!k_sd_init()) {
-        uint8_t sector0[512];
-        k_sd_read_sector(0, sector0);
-        if (sector0[510] == 0x55 && sector0[511] == 0xAA) {
-            k_uart_print("SD CARD OK.\r\n");
-        } else {
-            k_uart_print("SD CARD - INVALID BOOT SECTOR ERROR.\r\n");
-        }
-    } else {
-        k_uart_print("SD FAILED. \n\r");
-    }
+    k_fs_init();
+    k_uart_print("FILESYSTEM OK.\n\r");
 
     k_setup_lcd();
     clear_screen(0x000000);
@@ -73,12 +68,13 @@ void main(){
 
     k_idle_task_init();
     k_uart_print("IDLE TASK OK.\n\r");
-    
+
+
     k_uart_print("\n\rSETUP COMPLETE.\n\r");
-    k_task_create(task1, 1024);
-    k_task_create(task2, 1024);
+    k_task_create_no_interrupt(task1, 1024);
+    k_task_create_no_interrupt(task2, 1024);
     k_uart_printf("tasks running: %d\n\r", task_count);
-    k_uart_printf("free memory: %d bytes\n\r", k_get_free_heap_no_interrupt());
+    k_uart_printf("free memory: %d bytes\n\n\r", k_get_free_heap_no_interrupt());
     k_enable_interrupts();
     current_task = &task_table[0]; // Define quem começa
     start_first_task();
