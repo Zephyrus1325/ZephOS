@@ -73,8 +73,7 @@ int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
     // 2. CMD17: Read Single Block
     // No QEMU, para SDHC (imagens > 2GB ou formatadas modernas), o arg é o LBA.
     // Se não funcionar, tente (lba * 512).
-    if (sd_send_cmd(CMD17, lba*512, 0x40) != 0) return -1;
-    
+    if (sd_send_cmd(CMD17, lba*512, 0x40) != 0) {k_uart_printf("[FILESYSTEM]: SD COMMAND FAIL\n\r"); return -1;}
     // 3. Leitura da FIFO (Polling)
     int words_read = 0;
     int safety_timeout = 1000000;
@@ -88,5 +87,6 @@ int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
         if (status & ((1 << 1) | (1 << 3))) return -1;
         safety_timeout--;
     }
+        k_uart_printf("[FILESYSTEM]: SD COMMAND OK\n\r");
     return 0;
 }

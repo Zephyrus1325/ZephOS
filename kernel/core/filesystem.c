@@ -73,13 +73,17 @@ int k_fs_init(void) {
 int k_fs_open(const char *filename, file_t *file) {
     char fat_name[11];
     format_to_fat_name(filename, fat_name);
+    
     uint8_t buffer[512];
     uint32_t current_lba = cluster_to_lba(bpb.root_cluster);
 
-    if (k_sd_read_sector(current_lba, buffer) != 0) return -1;
+    k_uart_printf("ABAEDAEFASDd\n\r");
 
+    if (k_sd_read_sector(current_lba, buffer) != 0) {k_uart_printf("[FILESYSTEM]: SD SECTOR READ FAIL\n\r"); return -2;}
+    k_uart_printf("AAAAAAAAA\n\r");
     DirectoryEntry *entry = (DirectoryEntry *)buffer;
     for (int i = 0; i < 16; i++) {
+        k_uart_printf("Entry: 0x%x\n\r", entry[i].name[0]);
         if (entry[i].name[0] == 0x00) break;
         if (entry[i].name[0] == 0xE5) continue;
 
@@ -97,11 +101,12 @@ int k_fs_open(const char *filename, file_t *file) {
             k_uart_print("aqui vai\n\r");
             file->buffer = (uint8_t*) k_malloc(file->size);
             k_uart_print("aqui ?\n\r");
-            if(k_fs_read(file)){return -1;}
+            if(k_fs_read(file)){return -3;}
             return 0;
         }
+        if(i >= 10){k_uart_printf("NOME NORMAL: %s\n\rNOME FAT32: %s\n\r", filename, fat_name);}
     }
-    return -1;
+    return -4;
 }
 
 int k_fs_close(file_t* file){
