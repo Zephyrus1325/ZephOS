@@ -8,6 +8,7 @@ void (*ISR_fn[256])(void);  // Array com os ISRs de cada ID de interrupção
 
 /* Configura Interrupções do sistema */
 void k_setup_interrupts(){
+    k_disable_interrupts(); // Garante que o interrupt disable está ativado (evita de ativar uma interrupção durante o setup)
     k_gic_init();
 }
 

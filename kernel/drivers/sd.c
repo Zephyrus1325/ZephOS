@@ -63,6 +63,8 @@ int k_sd_init(void) {
 int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
     uint32_t *dest = (uint32_t *)buffer;
 
+    k_disable_interrupts(); // Seção Crítica Abaixo !!
+
     // 1. Limpar status e configurar Data Path
     *((volatile uint32_t *)(MMCI_BASE + 0x38)) = 0xFFFFFFFF;
     *MMCI_DATA_TIMER = 0xFFFF;
@@ -73,7 +75,13 @@ int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
     // 2. CMD17: Read Single Block
     // No QEMU, para SDHC (imagens > 2GB ou formatadas modernas), o arg é o LBA.
     // Se não funcionar, tente (lba * 512).
-    if (sd_send_cmd(CMD17, lba*512, 0x40) != 0) {k_uart_printf("[FILESYSTEM]: SD COMMAND FAIL\n\r"); return -1;}
+
+    if (sd_send_cmd(CMD17, lba*512, 0x40) != 0) {
+        k_uart_print("[FILESYSTEM]: SD COMMAND FAIL\n\r"); 
+        k_enable_interrupts(); 
+        return -1;
+    }
+
     // 3. Leitura da FIFO (Polling)
     int words_read = 0;
     int safety_timeout = 1000000;
@@ -87,6 +95,6 @@ int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
         if (status & ((1 << 1) | (1 << 3))) return -1;
         safety_timeout--;
     }
-        k_uart_printf("[FILESYSTEM]: SD COMMAND OK\n\r");
+    k_enable_interrupts();
     return 0;
 }

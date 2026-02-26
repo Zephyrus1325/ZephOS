@@ -27,9 +27,11 @@ void k_uart_putc(char c) {
 }
 
 void k_uart_print(char* s){
+    k_disable_interrupts();
     while(*s){
         k_uart_putc(*s++);
     }
+    k_enable_interrupts();
 }   
 
 void k_uart_print_hex(unsigned int val){
@@ -56,6 +58,21 @@ void k_uart_printf(const char *fmt, ...) {
     k_disable_interrupts();
     k_vprintf_internal(k_uart_putc, fmt, args);
     k_enable_interrupts();
+    
+    va_end(args);
+}
+
+void k_uart_print_no_interrupt(char* s){
+    while(*s){
+        k_uart_putc(*s++);
+    }
+}   
+
+void k_uart_printf_no_interrupt(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    
+    k_vprintf_internal(k_uart_putc, fmt, args);
     
     va_end(args);
 }
