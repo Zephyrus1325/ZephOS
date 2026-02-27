@@ -6,6 +6,7 @@
 #include "include/syscall.h"
 #include "drivers/ps2.h"
 
+#include "drivers/interrupts.h"
 #include "drivers/lcd.h"
 
 #include "drivers/sd.h"
@@ -16,22 +17,18 @@ extern void k_uart_printf_no_interrupt(const char *fmt, ...);
 extern void k_uart_print_no_interrupt(char* s);
 
 void task1(){
-    k_uart_print("HEY!\n\rArquivos!\n\r");
-    
-    file_t f;
 
-    if(!k_fs_open("test.txt", &f)){
-        k_uart_print("Abri o arquivo...\n\r");
-        k_uart_printf("[PROG A]: BUFFER COISO: 0x%x\n\r", (unsigned int) f.buffer);
-        k_uart_printf("%s\n\r", f.buffer);
-    } else {
-        k_uart_print("NAO FOI AAAAAAAA\n\r");
-    }
-    
-
+    //uint8_t* meu_log = k_malloc(1024);
+    //// Copia uma string para o buffer (simulando dados)
+    //char *msg = "LOG DO KERNEL: Sistema de arquivos funcionando!";
+    //for(int i = 0; msg[i] != '\0'; i++) meu_log[i] = msg[i];
+//
+    //if (k_fs_save_file("KERNAL.LOG", meu_log, 46) == 0) {
+    //    k_uart_print("Teste de persistencia OK. Verifique no host com mdir.\r\n");
+    //}
     
     while(1){
-        sys_printf("[PROG A]: E\n\r");
+        //sys_printf("[PROG A]: E\n\r");
         sys_msleep(999);
     }
 }
@@ -41,13 +38,21 @@ void task2(){
     
     file_t f;
     k_uart_printf("[PROG B]: HEAP BEFORE FILE READ: %d BYTES\n\r", k_get_free_heap());
+    file_t f2;
 
-
-    if(!k_fs_open("grande.txt", &f)){
-        k_uart_print("Abri o arquivo grandee...\n\r");
+    if(!k_fs_open("kernal.log", &f)){
         k_uart_printf("[PROG B]: BUFFER COISO 2: 0x%x\n\r", (unsigned int) f.buffer);
-        for(int i = 19980; i < 20000; i++){
+        for(int i = 0; i < f.size; i++){
             k_uart_putc(f.buffer[i]);
+        }
+    } else {
+        k_uart_print("\n\rNAO FOI 2 AAAAAAAA\n\r");
+    }
+
+    if(!k_fs_open("kernel.log", &f2)){
+        k_uart_printf("[PROG B]: BUFFER COISO 2: 0x%x\n\r", (unsigned int) f2.buffer);
+        for(int i = 0; i < f2.size; i++){
+            k_uart_putc(f2.buffer[i]);
         }
     } else {
         k_uart_print("\n\rNAO FOI 2 AAAAAAAA\n\r");
@@ -94,10 +99,12 @@ void main(){
         k_uart_print_no_interrupt("\n\r[KERNEL]: SETUP FAILED.\n\r");
         while(1){;}
     }
+
+
     k_task_create_no_interrupt(task1, 1024);
     k_task_create_no_interrupt(task2, 1024);
-    k_uart_printf_no_interrupt("tasks running: %d\n\r", task_count);
-    k_uart_printf_no_interrupt("free memory: %d bytes\n\n\r", k_get_free_heap_no_interrupt());
+    k_uart_printf_no_interrupt("[KERNEL]: TASKS RUNNING: %d\n\r", task_count);
+    k_uart_printf_no_interrupt("[KERNEL]: FREE MEMORY: %d BYTES\n\n\r", k_get_free_heap_no_interrupt());
     k_enable_interrupts();
     current_task = &task_table[0]; // Define quem começa
     start_first_task();

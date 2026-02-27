@@ -41,6 +41,55 @@ static uint32_t get_next_cluster(uint32_t current_cluster) {
     return next & 0x0FFFFFFF;
 }
 
+int mark_cluster_in_fat(uint32_t cluster, uint32_t value) {
+    uint8_t fat_buffer[512];
+    
+    // 1. Calcular em qual setor da FAT o índice desse cluster reside
+    // Cada setor tem 512 bytes, cada entrada tem 4 bytes = 128 entradas por setor.
+    uint32_t fat_offset = cluster * 4;
+    uint32_t fat_sector_relative = fat_offset / 512;
+    uint32_t entry_offset = fat_offset % 512;
+
+    // 2. Atualizar todas as cópias da FAT (geralmente bpb.fat_count = 2)
+    for (int i = 0; i < bpb.fat_count; i++) {
+        uint32_t fat_lba = partition_begin_lba + bpb.reserved_sectors + 
+                           (i * bpb.sectors_per_fat) + fat_sector_relative;
+
+        // Lê o setor atual da FAT
+        if (k_sd_read_sector(fat_lba, fat_buffer) != 0) return -1;
+
+        // Altera apenas os 4 bytes correspondentes ao cluster
+        uint32_t *entries = (uint32_t *)fat_buffer;
+        entries[entry_offset / 4] = value & 0x0FFFFFFF; // FAT32 usa 28 bits
+
+        // Escreve de volta o setor modificado
+        if (k_sd_write_sector(fat_lba, fat_buffer) != 0) return -1;
+    }
+
+    return 0;
+}
+
+uint32_t find_free_cluster() {
+    uint8_t fat_buffer[512];
+    uint32_t total_fat_sectors = bpb.sectors_per_fat;
+
+    for (uint32_t s = 0; s < total_fat_sectors; s++) {
+        uint32_t lba = partition_begin_lba + bpb.reserved_sectors + s;
+        if (k_sd_read_sector(lba, fat_buffer) != 0) return 0xFFFFFFFF;
+
+        uint32_t *entries = (uint32_t *)fat_buffer;
+        for (int i = 0; i < 128; i++) {
+            // Pula os clusters reservados (0 e 1) no primeiro setor da FAT
+            if (s == 0 && i < 2) continue;
+
+            if ((entries[i] & 0x0FFFFFFF) == 0) {
+                return (s * 128) + i;
+            }
+        }
+    }
+    return 0xFFFFFFFF; // Disco cheio
+}
+
 int k_fs_init(void) {
     uint8_t sector_buffer[512];
 
@@ -99,7 +148,7 @@ int k_fs_open(const char *filename, file_t *file) {
         if (match) {
             file->size = entry[i].file_size;
             file->first_cluster = (entry[i].cluster_high << 16) | entry[i].cluster_low;
-            file->buffer = (uint8_t*) k_malloc(file->size);
+            file->buffer = (uint8_t*) k_malloc(((file->size + 511) & ~511) + 1); // Aloca o próximo multiplo de 512 bytes + 1 (O cartão SD le em blocos de 512 bytes)
             if(k_fs_read(file)){return -3;}
             return 0;
         }
@@ -144,4 +193,87 @@ void k_fs_ls() {
         }
         k_uart_print("\r\n");
     }
+}
+
+int k_fs_save_file(const char *filename, uint8_t *data, uint32_t size) {
+    uint8_t dir_buffer[512];
+    
+    // 1. Encontrar um cluster livre para os dados
+    uint32_t free_cluster = find_free_cluster();
+    if (free_cluster == 0xFFFFFFFF) {
+        k_uart_print("FS: Erro - Disco Cheio\r\n");
+        return -1;
+    }
+
+    // 2. Reservar o cluster na FAT (Marca como Fim de Arquivo)
+    if (mark_cluster_in_fat(free_cluster, 0x0FFFFFFF) != 0) return -2;
+
+    // 3. Gravar os dados reais no setor correspondente ao cluster
+    // Importante: Estamos gravando apenas o primeiro setor do cluster (512 bytes)
+    uint32_t data_lba = cluster_to_lba(free_cluster);
+    if (k_sd_write_sector(data_lba, data) != 0) return -3;
+
+    // 4. Criar a entrada no diretório raiz
+    uint32_t root_lba = cluster_to_lba(bpb.root_cluster);
+    if (k_sd_read_sector(root_lba, dir_buffer) != 0) return -4;
+
+    DirectoryEntry *entries = (DirectoryEntry *)dir_buffer;
+    int entry_found = -1;
+
+    for (int i = 0; i < 16; i++) {
+        // 0x00 = nunca usado, 0xE5 = deletado
+        if (entries[i].name[0] == 0x00 || entries[i].name[0] == 0xE5) {
+            entry_found = i;
+            break;
+        }
+    }
+
+    if (entry_found == -1) {
+        k_uart_print("FS: Erro - Diretorio Raiz Cheio\r\n");
+        return -5;
+    }
+
+    // 5. Preencher a entrada do diretório
+    format_to_fat_name(filename, (char*)entries[entry_found].name);
+    entries[entry_found].attr = 0x20; // Arquivo comum (Archive)
+    entries[entry_found].cluster_low = (uint16_t)(free_cluster & 0xFFFF);
+    entries[entry_found].cluster_high = (uint16_t)((free_cluster >> 16) & 0xFFFF);
+    entries[entry_found].file_size = size;
+    
+    // Opcional: Aqui você preencheria crt_date e crt_time se tivesse um driver de RTC
+
+    // 6. Gravar o setor de diretório atualizado de volta no SD
+    if (k_sd_write_sector(root_lba, dir_buffer) != 0) return -6;
+
+    k_uart_print("FS: Arquivo salvo com sucesso!\r\n");
+    return 0;
+}
+
+int k_fs_create(const char *filename) {
+    uint8_t dir_buffer[512];
+    uint32_t root_lba = cluster_to_lba(bpb.root_cluster);
+    
+    // 1. Achar cluster livre na FAT (ex: cluster 500)
+    uint32_t free_cluster = find_free_cluster(); 
+    mark_cluster_in_fat(free_cluster, 0x0FFFFFFF);
+
+    // 2. Ler diretório raiz para achar slot
+    k_sd_read_sector(root_lba * 512, dir_buffer);
+    DirectoryEntry *entries = (DirectoryEntry *)dir_buffer;
+    
+    for (int i = 0; i < 16; i++) {
+        if (entries[i].name[0] == 0x00 || entries[i].name[0] == 0xE5) {
+            // Preenche o slot
+            format_to_fat_name(filename, (char*)entries[i].name);
+            entries[i].attr = 0x20;
+            entries[i].cluster_low = free_cluster & 0xFFFF;
+            entries[i].cluster_high = (free_cluster >> 16) & 0xFFFF;
+            entries[i].file_size = 0; // Começa vazio
+            
+            // Grava o setor de diretório de volta no SD
+            k_sd_write_sector(root_lba, dir_buffer);
+            return 0;
+        }
+    }
+    return -1;
 }

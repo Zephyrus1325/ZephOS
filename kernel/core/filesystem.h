@@ -36,7 +36,7 @@ typedef struct {
     char     fs_type[8];
 } __attribute__((packed)) FAT32_BPB;
 
-typedef struct {
+typedef struct file_t {
     char name[32];
     uint32_t size;
     uint32_t first_cluster;
@@ -65,5 +65,6 @@ int k_fs_init(void);
 void k_fs_ls(void);
 int k_fs_open(const char *filename, file_t *file);
 int k_fs_read(file_t *file);
-
+int k_fs_create(const char *filename);
+int k_fs_save_file(const char *filename, uint8_t *data, uint32_t size);
 #endif

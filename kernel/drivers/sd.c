@@ -1,5 +1,20 @@
 #include "sd.h"
 
+/* OTIMIZAÇÃO TODO: Configurar cartão SD de modo que haja um FIFO de operações de disco, ou seja,
+ * os programas fazem uma requisição de leitura/escrita no disco, e o interrupt handler do SD coordena
+ * estas operações e liberações de leitura e escrita do disco.
+ * 
+ * LOGICA GERAL:
+ * - PROGRAMA REQUISITA AO KERNEL A OPERAÇÃO COM DISCO
+ * - KERNEL ADICIONA A REQUISIÇÃO À UMA FILA
+ * - ISR DO CARTÃO SD COORDENA AS OPERAÇÕES E LOCAIS DE LEITURAS E ESCRITAS
+ * - AO FIM DA FILA, EMITE FLAG DE "DESATIVADO"
+ * 
+ * - OU SEJA, DEIXAR ESSE DRIVER MAIS ROBUSTO (e menos travado).
+ * 
+*/
+
+
 static uint32_t card_rca = 0;
 
 /* Helper: Envia comando e espera conclusão */
@@ -61,9 +76,10 @@ int k_sd_init(void) {
 }
 
 int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
-    uint32_t *dest = (uint32_t *)buffer;
-
+    
     k_disable_interrupts(); // Seção Crítica Abaixo !!
+
+    uint32_t *dest = (uint32_t *)buffer;
 
     // 1. Limpar status e configurar Data Path
     *((volatile uint32_t *)(MMCI_BASE + 0x38)) = 0xFFFFFFFF;
@@ -97,4 +113,52 @@ int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
     }
     k_enable_interrupts();
     return 0;
+}
+
+int k_sd_write_sector(uint32_t lba, uint8_t *buffer) {
+    
+    k_disable_interrupts();
+    uint32_t *src = (uint32_t *)buffer;
+
+    // 1. Limpar status e configurar Data Path para ESCRITA
+    *((volatile uint32_t *)(MMCI_BASE + 0x38)) = 0xFFFFFFFF;
+    *MMCI_DATA_TIMER = 0xFFFF;
+    *MMCI_DATA_LEN   = 512;
+    
+    // Bit 1 em 0: Direção Host -> Card (Escrita)
+    // Bit 0 em 1: Enable | Bits 4-7: Block size 2^9 (512)
+    *MMCI_DATA_CTRL  = (1 << 0) | (9 << 4); 
+
+    // 2. CMD24: Write Single Block
+    if (sd_send_cmd(CMD24, lba * 512, 0x40) != 0) {
+        k_uart_print("[FILESYSTEM]: SD COMMAND FAIL\n\r"); 
+        k_enable_interrupts(); 
+        return -1;
+    }
+    
+    // 3. Enviar dados para a FIFO (Polling)
+    int words_written = 0;
+    int safety_timeout = 1000000;
+
+    while (words_written < 128 && safety_timeout > 0) {
+        uint32_t status = *MMCI_STATUS;
+
+        // Bit 20: TXFIFO_HALF_EMPTY (ou checar se há espaço na FIFO)
+        // Se a FIFO não estiver cheia, podemos escrever
+        if (!(status & (1 << 15))) { // Bit 15: TXFIFO_FULL
+            *MMCI_FIFO = src[words_written++];
+        }
+
+        // Checar erros (Timeout de escrita ou CRC)
+        if (status & ((1 << 1) | (1 << 3))) {k_enable_interrupts(); return -1;}
+        
+        safety_timeout--;
+    }
+
+    // 4. Esperar o dado ser processado pelo cartão (Bit 8: Data End)
+    while(!(*MMCI_STATUS & (1 << 8)) && safety_timeout > 0) {
+        safety_timeout--;
+    }
+    k_enable_interrupts();
+    return (words_written == 128) ? 0 : -1;
 }

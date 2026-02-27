@@ -24,6 +24,7 @@
 #define CMD8   8  /* SEND_IF_COND */
 #define CMD16  16 /* SET_BLOCKLEN */
 #define CMD17  17 /* READ_SINGLE_BLOCK */
+#define CMD24  24 /* WRITE_SINGLE_BLOCK*/
 #define ACMD41 41 /* SD_SEND_OP_COND */
 #define CMD55  55 /* APP_CMD (Prefixo para ACMD) */
 
@@ -35,5 +36,6 @@
 /* Protótipos */
 int k_sd_init(void);
 int k_sd_read_sector(uint32_t lba, uint8_t *buffer);
+int k_sd_write_sector(uint32_t lba, uint8_t *buffer);
 
 #endif
