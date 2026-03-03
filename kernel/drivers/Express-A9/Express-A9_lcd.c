@@ -31,8 +31,17 @@ void put_pixel(int x, int y, uint32_t color) {
     }
 }
 
+#include "drivers/uart.h"
+#include "drivers/interrupts.h"
+
 void clear_screen(uint32_t color) {
-    for (int i = 0; i < 1024 * 768; i++) {
+    k_enable_interrupts();
+    for (int i = 0; i < 1024 * 768; i++) { 
+        //if(i == 1){
+        //    k_uart_print("CAVALO\n\r");
+        //}
         framebuffer[i] = color;
     }
+    k_disable_interrupts();
+    k_uart_print("CAVALO\n\r");
 }

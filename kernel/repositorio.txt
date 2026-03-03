@@ -1,0 +1,1635 @@
+==> ./arch/arch_config.h <==
+
+==> ./core/fifo.c <==
+#include <stdint.h>
+#include <stdbool.h>
+
+#define FIFO_SIZE 256
+
+static struct {
+    uint8_t buffer[FIFO_SIZE];
+    volatile int head; // Escrita (Kernel/IRQ)
+    volatile int tail; // Leitura (User/Syscall)
+} kbd_fifo = { .head = 0, .tail = 0 };
+
+/* * Adiciona um caractere ao buffer.
+ * Chamada pelo k_ps2_irq_handler ou k_uart_irq_handler.
+ */
+bool k_fifo_put(char c) {
+    int next = (kbd_fifo.head + 1) % FIFO_SIZE;
+
+    // Se o próximo índice for o tail, o buffer está cheio
+    if (next == kbd_fifo.tail) {
+        return false; // Caractere descartado (overflow)
+    }
+
+    kbd_fifo.buffer[kbd_fifo.head] = c;
+    kbd_fifo.head = next;
+    return true;
+}
+
+/* * Remove e retorna um caractere do buffer.
+ * Chamada pela Syscall SYS_GETCHAR.
+ */
+int k_fifo_get(void) {
+    // Se head == tail, o buffer está vazio
+    if (kbd_fifo.head == kbd_fifo.tail) {
+        return -1;
+    }
+
+    char c = kbd_fifo.buffer[kbd_fifo.tail];
+    kbd_fifo.tail = (kbd_fifo.tail + 1) % FIFO_SIZE;
+    return (int)c;
+}
+
+/* Retorna true se houver dados para ler */
+bool k_fifo_has_data(void) {
+    return kbd_fifo.head != kbd_fifo.tail;
+}
+==> ./core/fifo.h <==
+#ifndef FIFO_H
+#define FIFO_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+/**
+ * @brief Insere um caractere no buffer circular do teclado.
+ * @param c Caractere vindo do driver de hardware.
+ * @return true se inserido, false se o buffer estiver cheio.
+ */
+bool k_fifo_put(char c);
+
+/**
+ * @brief Retira um caractere do buffer circular.
+ * @return O caractere (0-255) ou -1 se o buffer estiver vazio.
+ */
+int k_fifo_get(void);
+
+/**
+ * @brief Verifica se existem dados pendentes no buffer.
+ * @return true se houver caracteres para ler.
+ */
+bool k_fifo_has_data(void);
+
+#endif /* FIFO_H */
+==> ./core/filesystem.c <==
+#include "core/filesystem.h"
+#include "drivers/sd.h"   // Certifique-se de que o path está correto
+#include "drivers/uart.h"
+#include "core/memory.h"
+
+static FAT32_BPB bpb;
+static uint32_t partition_begin_lba = 0;
+
+static uint32_t cluster_to_lba(uint32_t cluster) {
+    uint32_t fat_region_size = bpb.fat_count * bpb.sectors_per_fat;
+    uint32_t data_region_lba = partition_begin_lba + bpb.reserved_sectors + fat_region_size;
+    return data_region_lba + ((cluster - 2) * bpb.sectors_per_cluster);
+}
+
+static void format_to_fat_name(const char *src, char *dest) {
+    int i = 0, j = 0;
+    for (i = 0; i < 11; i++) dest[i] = ' ';
+    i = 0;
+    while (src[i] != '.' && src[i] != '\0' && j < 8) {
+        dest[j++] = (src[i] >= 'a' && src[i] <= 'z') ? src[i] - 32 : src[i];
+        i++;
+    }
+    if (src[i] == '.') {
+        i++;
+        j = 8;
+        while (src[i] != '\0' && j < 11) {
+            dest[j++] = (src[i] >= 'a' && src[i] <= 'z') ? src[i] - 32 : src[i];
+            i++;
+        }
+    }
+}
+
+static uint32_t get_next_cluster(uint32_t current_cluster) {
+    uint8_t fat_buffer[512];
+    uint32_t fat_offset = current_cluster * 4;
+    uint32_t fat_sector = partition_begin_lba + bpb.reserved_sectors + (fat_offset / 512);
+    uint32_t ent_offset = fat_offset % 512;
+
+    if (k_sd_read_sector(fat_sector, fat_buffer) != 0) return 0x0FFFFFFF;
+    uint32_t next = *(uint32_t *)&fat_buffer[ent_offset];
+    return next & 0x0FFFFFFF;
+}
+
+int mark_cluster_in_fat(uint32_t cluster, uint32_t value) {
+    uint8_t fat_buffer[512];
+    
+    // 1. Calcular em qual setor da FAT o índice desse cluster reside
+    // Cada setor tem 512 bytes, cada entrada tem 4 bytes = 128 entradas por setor.
+    uint32_t fat_offset = cluster * 4;
+    uint32_t fat_sector_relative = fat_offset / 512;
+    uint32_t entry_offset = fat_offset % 512;
+
+    // 2. Atualizar todas as cópias da FAT (geralmente bpb.fat_count = 2)
+    for (int i = 0; i < bpb.fat_count; i++) {
+        uint32_t fat_lba = partition_begin_lba + bpb.reserved_sectors + 
+                           (i * bpb.sectors_per_fat) + fat_sector_relative;
+
+        // Lê o setor atual da FAT
+        if (k_sd_read_sector(fat_lba, fat_buffer) != 0) return -1;
+
+        // Altera apenas os 4 bytes correspondentes ao cluster
+        uint32_t *entries = (uint32_t *)fat_buffer;
+        entries[entry_offset / 4] = value & 0x0FFFFFFF; // FAT32 usa 28 bits
+
+        // Escreve de volta o setor modificado
+        if (k_sd_write_sector(fat_lba, fat_buffer) != 0) return -1;
+    }
+
+    return 0;
+}
+
+uint32_t find_free_cluster() {
+    uint8_t fat_buffer[512];
+    uint32_t total_fat_sectors = bpb.sectors_per_fat;
+
+    for (uint32_t s = 0; s < total_fat_sectors; s++) {
+        uint32_t lba = partition_begin_lba + bpb.reserved_sectors + s;
+        if (k_sd_read_sector(lba, fat_buffer) != 0) return 0xFFFFFFFF;
+
+        uint32_t *entries = (uint32_t *)fat_buffer;
+        for (int i = 0; i < 128; i++) {
+            // Pula os clusters reservados (0 e 1) no primeiro setor da FAT
+            if (s == 0 && i < 2) continue;
+
+            if ((entries[i] & 0x0FFFFFFF) == 0) {
+                return (s * 128) + i;
+            }
+        }
+    }
+    return 0xFFFFFFFF; // Disco cheio
+}
+
+int k_fs_init(void) {
+    uint8_t sector_buffer[512];
+
+    if (k_sd_init() != 0) {
+        k_uart_print("[FILESYSTEM]: SD DRIVER ERROR\r\n");
+        return -1;
+    }
+
+    if (k_sd_read_sector(0, sector_buffer) != 0){k_uart_print("[FILESYSTEM]: SD SECTOR READ FAILED [!!!]\n\r"); return -1;}
+    // Checar MBR
+    if (sector_buffer[450] == 0x0C || sector_buffer[450] == 0x0B) {
+        partition_begin_lba = *(uint32_t*)&sector_buffer[454];
+        if (k_sd_read_sector(partition_begin_lba, sector_buffer) != 0){k_uart_print("[FILESYSTEM]: SD SECTOR READ FAILED [!!!]\n\r"); return -1;}
+    } else {
+        partition_begin_lba = 0;
+    }
+
+    for (int i = 0; i < sizeof(FAT32_BPB); i++) {
+        ((uint8_t*)&bpb)[i] = sector_buffer[i];
+    }
+
+    if (bpb.boot_signature != 0x29) {
+        k_uart_print("[FILESYSTEM]: INVALID FAT32\r\n");
+        return -1;
+    }
+    return 0;
+}
+
+int k_fs_open(const char *filename, file_t *file) {
+    char fat_name[11];
+    format_to_fat_name(filename, fat_name);
+    
+    uint8_t buffer[512*512];
+    uint32_t current_lba = cluster_to_lba(bpb.root_cluster);
+
+    //k_uart_print("ABAEDAEFASDd\n\r");
+    //k_uart_print("ABAEDAEFASDd2\n\r");
+    if (k_sd_read_sector(current_lba, buffer) != 0) {k_uart_print("[FILESYSTEM]: SD SECTOR READ FAIL\n\r"); return -2;}
+    //k_uart_print("AAAAAAAAA\n\r");
+    DirectoryEntry *entry = (DirectoryEntry *)buffer;
+    for (int i = 0; i < 16; i++) {
+        //k_uart_printf("Entry: 0x%x\n\r", entry[i].name[0]);
+        if (entry[i].name[0] == 0x00) break;
+        if (entry[i].name[0] == 0xE5) continue;
+
+        bool match = true;
+        for (int k = 0; k < 11; k++) {
+            //k_uart_printf("%c | %c\n\r", entry[i].name[k], fat_name[k]);
+            if (entry[i].name[k] != fat_name[k]) {
+                match = false;
+                //k_uart_print("AFF DEU RUIM\n\r");
+                break;
+            }
+        }
+
+        if (match) {
+            file->size = entry[i].file_size;
+            file->first_cluster = (entry[i].cluster_high << 16) | entry[i].cluster_low;
+            file->buffer = (uint8_t*) k_malloc(((file->size + 511) & ~511) + 1); // Aloca o próximo multiplo de 512 bytes + 1 (O cartão SD le em blocos de 512 bytes)
+            if(k_fs_read(file)){return -3;}
+            return 0;
+        }
+    }
+    return -4;
+}
+
+int k_fs_close(file_t* file){
+    k_free(file->buffer);
+    file->buffer = (uint8_t*)0;
+}
+
+int k_fs_read(file_t *file) {
+    
+    uint32_t current_cluster = file->first_cluster;
+    uint32_t buffer_offset = 0;
+    
+    while (current_cluster < 0x0FFFFFF8) {
+        uint32_t lba = cluster_to_lba(current_cluster);
+        for (int s = 0; s < bpb.sectors_per_cluster; s++) {
+            if (k_sd_read_sector(lba + s, file->buffer + buffer_offset) != 0) return -1;
+            buffer_offset += 512;
+        }
+        
+        current_cluster = get_next_cluster(current_cluster);
+    }
+    return 0;
+}
+
+void k_fs_ls() {
+    uint8_t buffer[512];
+    if (k_sd_read_sector(cluster_to_lba(bpb.root_cluster), buffer) != 0) return;
+    DirectoryEntry *entry = (DirectoryEntry *)buffer;
+
+    k_uart_print("--- Files ---\r\n");
+    for (int i = 0; i < 16; i++) {
+        if (entry[i].name[0] == 0x00) break;
+        if (entry[i].name[0] == 0xE5 || (entry[i].attr & 0x0F) == 0x0F) continue;
+
+        for (int k = 0; k < 11; k++) {
+            k_uart_putc(entry[i].name[k]);
+            if (k == 7) k_uart_putc(' '); 
+        }
+        k_uart_print("\r\n");
+    }
+}
+
+int k_fs_save_file(const char *filename, uint8_t *data, uint32_t size) {
+    uint8_t dir_buffer[512];
+    
+    // 1. Encontrar um cluster livre para os dados
+    uint32_t free_cluster = find_free_cluster();
+    if (free_cluster == 0xFFFFFFFF) {
+        k_uart_print("FS: Erro - Disco Cheio\r\n");
+        return -1;
+    }
+
+    // 2. Reservar o cluster na FAT (Marca como Fim de Arquivo)
+    if (mark_cluster_in_fat(free_cluster, 0x0FFFFFFF) != 0) return -2;
+
+    // 3. Gravar os dados reais no setor correspondente ao cluster
+    // Importante: Estamos gravando apenas o primeiro setor do cluster (512 bytes)
+    uint32_t data_lba = cluster_to_lba(free_cluster);
+    if (k_sd_write_sector(data_lba, data) != 0) return -3;
+
+    // 4. Criar a entrada no diretório raiz
+    uint32_t root_lba = cluster_to_lba(bpb.root_cluster);
+    if (k_sd_read_sector(root_lba, dir_buffer) != 0) return -4;
+
+    DirectoryEntry *entries = (DirectoryEntry *)dir_buffer;
+    int entry_found = -1;
+
+    for (int i = 0; i < 16; i++) {
+        // 0x00 = nunca usado, 0xE5 = deletado
+        if (entries[i].name[0] == 0x00 || entries[i].name[0] == 0xE5) {
+            entry_found = i;
+            break;
+        }
+    }
+
+    if (entry_found == -1) {
+        k_uart_print("FS: Erro - Diretorio Raiz Cheio\r\n");
+        return -5;
+    }
+
+    // 5. Preencher a entrada do diretório
+    format_to_fat_name(filename, (char*)entries[entry_found].name);
+    entries[entry_found].attr = 0x20; // Arquivo comum (Archive)
+    entries[entry_found].cluster_low = (uint16_t)(free_cluster & 0xFFFF);
+    entries[entry_found].cluster_high = (uint16_t)((free_cluster >> 16) & 0xFFFF);
+    entries[entry_found].file_size = size;
+    
+    // Opcional: Aqui você preencheria crt_date e crt_time se tivesse um driver de RTC
+
+    // 6. Gravar o setor de diretório atualizado de volta no SD
+    if (k_sd_write_sector(root_lba, dir_buffer) != 0) return -6;
+
+    k_uart_print("FS: Arquivo salvo com sucesso!\r\n");
+    return 0;
+}
+
+int k_fs_create(const char *filename) {
+    uint8_t dir_buffer[512];
+    uint32_t root_lba = cluster_to_lba(bpb.root_cluster);
+    
+    // 1. Achar cluster livre na FAT (ex: cluster 500)
+    uint32_t free_cluster = find_free_cluster(); 
+    mark_cluster_in_fat(free_cluster, 0x0FFFFFFF);
+
+    // 2. Ler diretório raiz para achar slot
+    k_sd_read_sector(root_lba * 512, dir_buffer);
+    DirectoryEntry *entries = (DirectoryEntry *)dir_buffer;
+    
+    for (int i = 0; i < 16; i++) {
+        if (entries[i].name[0] == 0x00 || entries[i].name[0] == 0xE5) {
+            // Preenche o slot
+            format_to_fat_name(filename, (char*)entries[i].name);
+            entries[i].attr = 0x20;
+            entries[i].cluster_low = free_cluster & 0xFFFF;
+            entries[i].cluster_high = (free_cluster >> 16) & 0xFFFF;
+            entries[i].file_size = 0; // Começa vazio
+            
+            // Grava o setor de diretório de volta no SD
+            k_sd_write_sector(root_lba, dir_buffer);
+            return 0;
+        }
+    }
+    return -1;
+}
+
+void free_cluster_chain(uint32_t start_cluster) {
+    uint32_t current = start_cluster;
+    uint32_t next;
+    uint8_t fat_buffer[512];
+
+    while (current >= 2 && current < 0x0FFFFFF8) {
+        // 1. Descobrir qual é o próximo cluster antes de apagar o atual
+        uint32_t fat_offset = current * 4;
+        uint32_t fat_sector = partition_begin_lba + bpb.reserved_sectors + (fat_offset / 512);
+        uint32_t entry_offset = fat_offset % 512;
+
+        if (k_sd_read_sector(fat_sector, fat_buffer) != 0) break;
+        
+        next = (*(uint32_t *)&fat_buffer[entry_offset]) & 0x0FFFFFFF;
+
+        // 2. Marcar o cluster atual como livre (0)
+        mark_cluster_in_fat(current, 0x00000000);
+
+        // 3. Mover para o próximo
+        current = next;
+    }
+}
+
+int k_fs_delete(const char *filename) {
+    char fat_name[11];
+    format_to_fat_name(filename, fat_name);
+    
+    uint8_t dir_buffer[512];
+    uint32_t root_lba = cluster_to_lba(bpb.root_cluster);
+
+    if (k_sd_read_sector(root_lba, dir_buffer) != 0) return -1;
+
+    DirectoryEntry *entries = (DirectoryEntry *)dir_buffer;
+    for (int i = 0; i < 16; i++) {
+        if (entries[i].name[0] == 0x00) break; // Fim da lista
+        if (entries[i].name[0] == 0xE5) continue; // Já deletado
+
+        // Comparar nome
+        bool match = true;
+        for (int k = 0; k < 11; k++) {
+            if (entries[i].name[k] != fat_name[k]) {
+                match = false;
+                break;
+            }
+        }
+
+        if (match) {
+            // 1. Obter o primeiro cluster do arquivo
+            uint32_t first_cluster = (entries[i].cluster_high << 16) | entries[i].cluster_low;
+
+            // 2. Liberar todos os clusters na FAT
+            free_cluster_chain(first_cluster);
+
+            // 3. Marcar a entrada do diretório como deletada (0xE5)
+            entries[i].name[0] = 0xE5;
+
+            // 4. Salvar o setor de diretório de volta no SD
+            if (k_sd_write_sector(root_lba, dir_buffer) != 0) return -2;
+
+            k_uart_print("FS: Arquivo deletado com sucesso!\r\n");
+            return 0;
+        }
+    }
+
+    k_uart_print("FS: Arquivo para excluir nao encontrado.\r\n");
+    return -3;
+}
+==> ./core/filesystem.h <==
+#ifndef FILESYSTEM_H
+#define FILESYSTEM_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+typedef struct {
+    uint8_t  jmp[3];
+    char     oem_name[8];
+    uint16_t bytes_per_sector;
+    uint8_t  sectors_per_cluster;
+    uint16_t reserved_sectors;
+    uint8_t  fat_count;
+    uint16_t root_ent_count;
+    uint16_t total_sectors_16;
+    uint8_t  media_type;
+    uint16_t fat_size_16;
+    uint16_t sectors_per_track;
+    uint16_t number_of_heads;
+    uint32_t hidden_sectors;
+    uint32_t total_sectors_32;
+    
+    // Extensão FAT32
+    uint32_t sectors_per_fat;
+    uint16_t flags;
+    uint16_t fat_version;
+    uint32_t root_cluster;
+    uint16_t fs_info_sector;
+    uint16_t backup_boot_sector;
+    uint8_t  reserved[12];
+    uint8_t  drive_number;
+    uint8_t  reserved1;
+    uint8_t  boot_signature;
+    uint32_t volume_id;
+    char     volume_label[11];
+    char     fs_type[8];
+} __attribute__((packed)) FAT32_BPB;
+
+typedef struct file_t {
+    char name[32];
+    uint32_t size;
+    uint32_t first_cluster;
+    uint8_t* buffer;
+    bool is_directory;
+} file_t;
+
+typedef struct {
+    uint8_t  name[11];      // Nome 8.3
+    uint8_t  attr;          // Atributos
+    uint8_t  nt_res;
+    uint8_t  crt_time_tenth;
+    uint16_t crt_time;
+    uint16_t crt_date;
+    uint16_t lst_acc_date;
+    uint16_t cluster_high;  // Parte alta do cluster
+    uint16_t wrt_time;
+    uint16_t wrt_date;
+    uint16_t cluster_low;   // Parte baixa do cluster
+    uint32_t file_size;     // Tamanho em bytes
+} __attribute__((packed)) DirectoryEntry;
+
+/* Retornos: 0 para Sucesso, -1 para Erro */
+
+int k_fs_init(void);
+void k_fs_ls(void);
+int k_fs_open(const char *filename, file_t *file);
+int k_fs_close(file_t *file);
+int k_fs_read(file_t *file);
+int k_fs_create(const char *filename);
+int k_fs_save_file(const char *filename, uint8_t *data, uint32_t size);
+void free_cluster_chain(uint32_t start_cluster);
+int k_fs_delete(const char *filename);
+#endif
+==> ./core/main.c <==
+#include "drivers/interrupts.h"
+#include "drivers/timer.h"
+#include "drivers/uart.h"
+#include "core/task.h"
+#include "core/memory.h"
+#include "include/syscall.h"
+#include "drivers/ps2.h"
+
+#include "drivers/interrupts.h"
+#include "drivers/lcd.h"
+
+#include "drivers/sd.h"
+#include "core/filesystem.h"
+
+extern void start_first_task(void);
+extern void k_uart_printf_no_interrupt(const char *fmt, ...);
+extern void k_uart_print_no_interrupt(char* s);
+
+void task1(){
+    sys_printf("Hello!\n\r");
+    k_uart_print("HEOWLO\n\r");
+    while(1){
+        sys_msleep(999);
+    }
+}
+
+void task2(){
+    while(1){
+        sys_msleep(1000099);
+    }
+}
+
+void main(){
+    uint8_t init = 1;
+
+    k_setup_uart();
+    k_uart_print_no_interrupt("[KERNEL]: UART OK.\n\r");
+
+    k_setup_ps2();
+    k_uart_print_no_interrupt("[KERNEL]: PS/2 OK.\n\r");
+
+    k_heap_init();
+    k_uart_print_no_interrupt("[KERNEL]: HEAP OK.\n\r");
+
+    if(!k_fs_init()){k_uart_print_no_interrupt("[KERNEL]: FILESYSTEM OK.\n\r");}
+    else{k_uart_print_no_interrupt("[KERNEL]: FILESYSTEM FAILED. [!!!]\n\r"); init = 0;}
+
+    k_setup_lcd();
+    clear_screen(0x000000);
+    k_uart_print_no_interrupt("[KERNEL]: LCD DISPLAY OK.\n\r");
+
+    k_idle_task_init();
+    k_uart_print_no_interrupt("[KERNEL]: IDLE TASK OK.\n\r");
+
+    k_setup_interrupts();
+    k_uart_print_no_interrupt("[KERNEL]: INTERRUPTS OK.\n\r");
+
+    k_setup_timers();
+    k_uart_print_no_interrupt("[KERNEL]: TIMERS OK.\n\r");
+    
+    if(init){
+        k_uart_print_no_interrupt("\n\r[KERNEL]: SETUP COMPLETE.\n\r");
+    } else {
+        k_uart_print_no_interrupt("\n\r[KERNEL]: SETUP FAILED.\n\r");
+        while(1){;}
+    }
+
+    k_task_create_no_interrupt(task1, 1024);
+    k_task_create_no_interrupt(task2, 1024);
+    k_uart_printf_no_interrupt("[KERNEL]: TASKS RUNNING: %d\n\r", task_count);
+    k_uart_printf_no_interrupt("[KERNEL]: FREE MEMORY: %d BYTES\n\n\r", k_get_free_heap_no_interrupt());
+    // No main.c, antes de k_enable_interrupts
+k_uart_printf_no_interrupt("Teste direto: %d %x\n\r", 100, 0xABC);
+    k_enable_interrupts();
+    current_task = &task_table[0]; // Define quem começa
+    start_first_task();
+}
+
+
+==> ./core/memory.c <==
+#include "drivers/interrupts.h"
+#include "core/memory.h"
+
+extern uint8_t __heap_start;
+extern uint8_t __heap_end;
+
+static block_header_t *free_list = NULL;
+
+/* Função auxiliar para inicializar o Heap na SRAM */
+void k_heap_init() {
+    free_list = (block_header_t *)&__heap_start;
+    free_list->size = (uintptr_t)&__heap_end - (uintptr_t)&__heap_start - HEADER_SIZE;
+    free_list->is_free = 1;
+    free_list->next = NULL;
+}
+
+
+/*
+    Aloca um bloco de memória dentro do Heap
+    
+    @param  size Número de bytes a serem alocados
+    @return Ponteiro para o início do bloco alocado, retorna NULL em caso de erro
+*/
+void* k_malloc(size_t size) {
+    // 1. Alinhamento de 8 bytes
+    size = (size + 7) & ~7;
+
+    k_disable_interrupts(); // Desabilitar interrupções para evitar race condition
+
+    block_header_t *curr = free_list;
+
+
+    // Procurar o primeiro bloco livre que sirva (First Fit)
+    while (curr) {
+        if (curr->is_free && curr->size >= size) {
+            
+            // Se o bloco for muito maior que o necessário, dividi-lo (Split)
+            if (curr->size > (size + HEADER_SIZE + 8)) {
+                block_header_t *next_block = (block_header_t *)((uint8_t *)curr + HEADER_SIZE + size);
+                next_block->size = curr->size - size - HEADER_SIZE;
+                next_block->is_free = 1;
+                next_block->next = curr->next;
+
+                curr->size = size;
+                curr->next = next_block;
+            }
+
+            curr->is_free = 0;
+
+            k_enable_interrupts();   // Reativa Interrupções
+            return (void *)((uint8_t *)curr + HEADER_SIZE);
+        }
+        curr = curr->next;
+    }
+
+    k_enable_interrupts();  // Reativa Interrupções
+    return NULL; // Sem memória
+}
+
+/*
+    Aloca um bloco de memória dentro do Heap
+    
+    @param  size Número de bytes a serem alocados
+    @return Ponteiro para o início do bloco alocado, retorna NULL em caso de erro
+*/
+void* k_malloc_no_interrupt(size_t size) {
+    // 1. Alinhamento de 8 bytes
+    size = (size + 7) & ~7;
+
+    block_header_t *curr = free_list;
+
+
+    // Procurar o primeiro bloco livre que sirva (First Fit)
+    while (curr) {
+        if (curr->is_free && curr->size >= size) {
+            
+            // Se o bloco for muito maior que o necessário, dividi-lo (Split)
+            if (curr->size > (size + HEADER_SIZE + 8)) {
+                block_header_t *next_block = (block_header_t *)((uint8_t *)curr + HEADER_SIZE + size);
+                next_block->size = curr->size - size - HEADER_SIZE;
+                next_block->is_free = 1;
+                next_block->next = curr->next;
+
+                curr->size = size;
+                curr->next = next_block;
+            }
+
+            curr->is_free = 0;
+
+            return (void *)((uint8_t *)curr + HEADER_SIZE);
+        }
+        curr = curr->next;
+    }
+
+    return NULL; // Sem memória
+}
+
+
+/* 
+    Libera um bloco de memória
+
+    @param *ptr ponteiro para o início do bloco a ser liberado
+*/
+void k_free(void *ptr) {
+    if (!ptr) return;
+
+    k_disable_interrupts();   // Desabilitar interrupções para evitar race condition
+
+    // 1. Encontrar o header do bloco
+    block_header_t *header = (block_header_t *)((uint8_t *)ptr - HEADER_SIZE);
+    header->is_free = 1;
+
+    // Juntar blocos livres adjacentes para evitar fragmentação
+    block_header_t *curr = free_list;
+    while (curr && curr->next) {
+        if (curr->is_free && curr->next->is_free) {
+            curr->size += curr->next->size + HEADER_SIZE;
+            curr->next = curr->next->next;
+        } else {
+            curr = curr->next;
+        }
+    }
+
+    k_enable_interrupts();
+}
+
+
+/* 
+    Retorna o total de bytes livres no Heap 
+
+    @return Número de bytes livres
+*/
+size_t k_get_free_heap() {
+    size_t total_free = 0;
+    
+    k_disable_interrupts(); // Desabilitar interrupções para evitar race condition
+
+    block_header_t *curr = free_list;
+    while (curr) {
+        if (curr->is_free) {
+            total_free += curr->size;
+        }
+        curr = curr->next;
+    }
+
+    k_enable_interrupts();
+    return total_free;
+}
+
+size_t k_get_free_heap_no_interrupt() {
+    size_t total_free = 0;
+
+    block_header_t *curr = free_list;
+    while (curr) {
+        if (curr->is_free) {
+            total_free += curr->size;
+        }
+        curr = curr->next;
+    }
+
+    return total_free;
+}
+
+
+/* 
+    Retorna o maior bloco contínuo disponível (importante para saber se um malloc grande vai falhar) 
+
+    @return Tamanho do maior bloco livre em bytes
+*/
+size_t k_get_max_free_block() {
+    size_t max_block = 0;
+    
+    k_disable_interrupts();
+
+    block_header_t *curr = free_list;
+    while (curr) {
+        if (curr->is_free && curr->size > max_block) {
+            max_block = curr->size;
+        }
+        curr = curr->next;
+    }
+
+    k_enable_interrupts();
+    return max_block;
+}
+==> ./core/memory.h <==
+#ifndef MEMORY_H
+#define MEMORY_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+typedef struct block_header {
+    size_t size;                /* Tamanho do bloco de dados (excluindo este header) */
+    int is_free;                /* 1 se o bloco estiver livre, 0 se ocupado */
+    struct block_header *next;  /* Ponteiro para o próximo bloco na SRAM */
+} block_header_t;
+
+#define HEADER_SIZE sizeof(block_header_t)
+
+void k_heap_init();
+void* k_malloc(size_t size);
+void* k_malloc_no_interrupt(size_t size);
+void k_free(void *ptr);
+size_t k_get_free_heap();
+size_t k_get_max_free_block();
+size_t k_get_free_heap_no_interrupt();
+
+#endif
+==> ./core/strings_common.c <==
+#include <stdarg.h>
+
+static void itoa(unsigned int value, char* str, int base) {
+    char *ptr = str;
+    
+    if (value == 0) {
+        *ptr++ = '0';
+        *ptr = '\0';
+        return;
+    }
+
+    if (base == 16) {
+        // Base 16 continua rápida com Bitwise (sempre use isso para Hex)
+        const char *hex_chars = "0123456789abcdef";
+        char temp[10];
+        int i = 0;
+        while (value > 0) {
+            temp[i++] = hex_chars[value & 0xF];
+            value >>= 4;
+        }
+        while (i > 0) *ptr++ = temp[--i];
+        *ptr = '\0';
+    } 
+    else if (base == 10) {
+        // Tabela de potências de 10 para evitar divisões e loops longos
+        static const unsigned int powers[] = {1000000000, 100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1};
+        int started = 0;
+
+        for (int i = 0; i < 10; i++) {
+            unsigned int count = 0;
+            unsigned int p = powers[i];
+            
+            // Subtrai a potência atual o máximo de vezes possível
+            while (value >= p) {
+                value -= p;
+                count++;
+            }
+
+            if (count > 0 || started || p == 1) {
+                *ptr++ = count + '0';
+                started = 1; // Evita zeros à esquerda (ex: 000123)
+            }
+        }
+        *ptr = '\0';
+    }
+}
+
+// Tipo de função que aceita um caractere
+typedef void (*putc_func_t)(char);
+
+void k_vprintf_internal(putc_func_t putc_func, const char *fmt, va_list args) {
+    char buf[32];
+    char c;
+
+    while ((c = *fmt++)) {
+        if (c != '%') {
+            putc_func(c);
+            continue;
+        }
+
+        c = *fmt++;
+        switch (c) {
+            case 's': {
+                char *s = va_arg(args, char *);
+                while (s && *s) putc_func(*s++);
+                break;
+            }
+            case 'd': {
+                int d = va_arg(args, int);
+                if (d < 0) {
+                    putc_func('-');
+                    d = -d;
+                }
+                itoa((unsigned int)d, buf, 10);
+                for (int i = 0; buf[i]; i++) putc_func(buf[i]);
+                break;
+            }
+            case 'x': {
+                unsigned int x = va_arg(args, unsigned int);
+                itoa(x, buf, 16);
+                for (int i = 0; buf[i]; i++) putc_func(buf[i]);
+                break;
+            }
+            case 'c': {
+                char ch = (char)va_arg(args, int);
+                putc_func(ch);
+                break;
+            }
+            default:
+                putc_func('%');
+                if (c) putc_func(c);
+                break;
+        }
+    }
+}
+==> ./core/syscall.c <==
+#include <include/syscall.h>
+#include "task.h"
+#include <stdint.h>
+#include "core/task.h"
+#include "drivers/uart.h"
+#include "core/fifo.h"
+#include "core/filesystem.h"
+#include "drivers/interrupts.h"
+
+extern void k_vprintf_internal(putc_func_t putc_func, const char *fmt, va_list args);
+
+/*
+    Esta função é chamada pelo Assembly (svc_handler)
+
+    @param R0 id
+    @param R1 arg1
+    @param R2 arg2
+    @param R3 arg3
+
+    @return Retorno da syscall, ou código de sucesso/falha
+*/
+int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
+    switch (id) {
+        
+        case SYS_PRINT:
+            /* arg1 contém o ponteiro para a string na memória da tarefa */
+            k_uart_print((char *)arg1);
+            return 0; // Sucesso
+
+        case SYS_PUTC:
+            /* arg1 contém o ponteiro para a string na memória da tarefa */
+            k_uart_putc((char) arg1);
+            return 0; // Sucesso
+
+        case SYS_PRINTF:
+            k_disable_interrupts();
+            k_vprintf_internal(k_uart_putc, (const char*)arg1, *(va_list*)arg2);
+            k_enable_interrupts();
+            return 0;
+        
+        case SYS_GETCHAR:
+            // Tenta pegar o caractere da FIFO
+            // Se não tiver nada, retorna -1 para o usuário
+            // O programa de usuário pode então decidir se faz um Yield ou espera
+            return (int32_t) k_fifo_get();
+        case SYS_GETPID:
+            /* Retorna o ID da tarefa atual para ser lido no R0 do usuário */
+            return (int32_t)k_get_current_task_id();
+
+        case SYS_YIELD:
+            /* A tarefa voluntariamente cede a CPU */
+            scheduler();
+            return 0;   // Scheduler foi chamado, alterar task
+
+        case SYS_SLEEP:
+            // arg1 é o tempo em milissegundos (assumindo 1 tick = 1ms)
+            current_task->sleep_ticks = arg1;
+            current_task->state = TASK_SLEEPING;
+
+            // Força uma troca de contexto imediata para não gastar o resto do time-slice
+            scheduler(); 
+            return 0;   // Scheduler foi chamado, alterar task
+
+        case SYS_SPAWN:
+            return k_task_create((void (*)(void))arg1, arg2);
+
+        case SYS_OPEN_FILE:
+            return (int32_t) k_fs_open((const char*)arg1, (file_t*)arg2);
+
+        case SYS_CLOSE_FILE:
+            return (int32_t) k_fs_close((file_t*)arg2);
+
+        
+
+        default:
+            /* Caso a tarefa peça algo que não existe */
+            k_uart_print("[Kernel] Error: Unknown Syscall ID: 0x");
+            k_uart_print_hex(id);
+            k_uart_print("\n\r");
+            return -1;
+    }
+}
+==> ./core/task.c <==
+#include "drivers/uart.h"
+#include "task.h"
+#include "include/syscall.h"
+#include "core/memory.h"
+/*
+    Configura e inicia uma nova tarefa no sistema
+
+    @param *tcb Ponteiro para o tcb responsável por armazenar esta tarefa
+    @param id ID a ser atrelado a nova tarefa
+    @param stack_mem Ponteiro para o stack da tarefa
+    @param stack_size Total de bytes a ser alocados para o stack da tarefa
+
+*/
+void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* stack_mem, uint32_t stack_size) {
+    // Aponta para o fim da stack
+    tcb->stack_base = stack_mem;
+    uint32_t *s = (uint32_t *)&tcb->stack_base[stack_size];
+
+    // Ordem inversa dos POPs do Assembly:
+    *(--s) = (uint32_t)task_func; // PC (carregado pelo pop {pc}^)
+    *(--s) = 0x10;                // SPSR (carregado pelo pop {r1}) [NOTA: COLOCA AS TAREFAS NO MODO SUPERVISOR, COLOCAR 0x10 PARA USER MODE]
+    
+    // R12, R11, ..., R0 (carregados pelo pop {r0-r11, r12})
+    for (int i = 0; i < 13; i++) {
+        *(--s) = 0; 
+    }
+    
+    *(--s) = 0;                   // LR (carregado pelo pop {lr})
+
+    tcb->sp = (uint32_t)s;
+    tcb->id = id;
+    tcb->state = TASK_READY;
+    tcb->sleep_ticks = 0;
+}
+
+// Controle das tasks (scheduler)
+
+tcb_t* current_task = 0;
+tcb_t idle_task_tcb;
+
+tcb_t task_table[MAX_TASKS];
+uint32_t task_count = 0;
+
+
+/*
+    Scheduler chamado pelo assembly durante o SVC
+*/
+void scheduler(void) {
+    
+    // Pegamos o índice atual da tarefa para começar a busca a partir dele
+    // Note que usamos um int local para a busca para não estragar o índice global prematuramente
+    static int current_idx = 0;
+    int search_idx = current_idx;
+
+    // Tentamos encontrar uma tarefa READY no máximo 'task_count' vezes
+    for (int i = 0; i < task_count; i++) {
+        // Incrementa e rotaciona (sem usar %)
+        search_idx++;
+        if (search_idx >= task_count) {
+            search_idx = 0;
+        }
+        // AQUI ESTÁ A CHAVE: Só aceita se estiver READY
+        if (task_table[search_idx].state == TASK_READY) {
+            current_idx = search_idx; // Atualiza o índice oficial
+            current_task = &task_table[current_idx];
+            return; // Encontrou! Sai da função e volta para a tarefa
+        }
+    }
+    // Se o loop terminou e ninguém foi encontrado (todos SLEEPING):
+    // Forçamos a Idle Task.
+    current_task = &idle_task_tcb;
+}
+
+
+/*
+    Cria uma tarefa nova tarefa
+
+    @param *entry_point Ponteiro para função da nova tarefa
+    @param stack_size Tamanho do stack da nova tarefa, em bytes
+
+    @return ID da nova função ou código de erro
+*/
+int32_t k_task_create(void (*entry_point)(void), size_t stack_size) {
+    if (task_count >= MAX_TASKS) return -1;
+
+    // Aloca memória para a pilha da nova task no HEAP
+    // STACK_SIZE * 4 porque malloc geralmente recebe tamanho em bytes
+    uint32_t *new_stack = (uint32_t *)k_malloc(stack_size * sizeof(uint32_t));
+
+    if (new_stack == NULL){
+        k_uart_print("[KERNEL] ERROR CREATING TASK: OUT OF MEMORY\n\r");
+        return -2;
+    } // Erro: Out of Memory na SRAM
+
+    tcb_t *new_tcb = &task_table[task_count];
+
+    // Inicializa passando o ponteiro do Heap
+    k_task_init(new_tcb, task_count + 1, entry_point, new_stack, stack_size);
+
+    task_count++;
+    return new_tcb->id;
+}
+
+/*
+    Cria uma tarefa nova tarefa
+
+    @param *entry_point Ponteiro para função da nova tarefa
+    @param stack_size Tamanho do stack da nova tarefa, em bytes
+
+    @return ID da nova função ou código de erro
+*/
+int32_t k_task_create_no_interrupt(void (*entry_point)(void), size_t stack_size) {
+    if (task_count >= MAX_TASKS) return -1;
+
+    // Aloca memória para a pilha da nova task no HEAP
+    // STACK_SIZE * 4 porque malloc geralmente recebe tamanho em bytes
+    uint32_t *new_stack = (uint32_t *)k_malloc_no_interrupt(stack_size * sizeof(uint32_t));
+
+    if (new_stack == NULL){
+        k_uart_print("[KERNEL] ERROR CREATING TASK: OUT OF MEMORY\n\r");
+        return -2;
+    } // Erro: Out of Memory na SRAM
+
+    tcb_t *new_tcb = &task_table[task_count];
+
+    // Inicializa passando o ponteiro do Heap
+    k_task_init(new_tcb, task_count + 1, entry_point, new_stack, stack_size);
+
+    task_count++;
+    return new_tcb->id;
+}
+
+/*
+    Retorna o id da tarefa atual
+
+    @return id da tarefa
+*/
+uint32_t k_get_current_task_id(void) {
+    if (current_task != 0) {
+        return current_task->id;
+    }
+    return 0; // Caso não haja tarefa rodando
+}
+
+
+/*
+    Declaração da Idle Task
+*/
+void idle_task_func(){
+    while(1) {
+        //sys_write("IDLE\n");
+        asm volatile("wfi");
+    }
+}
+
+
+/*
+    Configura e inicia a Idle task 
+*/
+void k_idle_task_init(void) {
+    uint32_t *idle_stack = (uint32_t *)k_malloc_no_interrupt(64 * sizeof(uint32_t));
+    k_task_init(&idle_task_tcb, 0, idle_task_func, idle_stack, 64);
+    idle_task_tcb.state = TASK_READY;
+}
+
+
+/*
+    Handler responsável por acordar tasks dormindo
+*/
+void k_tick_handler(void) {
+    for (int i = 0; i < task_count; i++) {
+        if (task_table[i].state == TASK_SLEEPING) {
+            if (task_table[i].sleep_ticks > 0) {
+                task_table[i].sleep_ticks--;
+            }
+            
+            // Se o tempo acabou, acorda a tarefa
+            if (task_table[i].sleep_ticks == 0) {
+                task_table[i].state = TASK_READY;
+            }
+        }
+    }
+}
+==> ./core/task.h <==
+#ifndef TASK_H
+#define TASK_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+//#define STACK_SIZE 1024 // Tamanho padrão do stack para cada task
+#define MAX_TASKS 256   // Quantidade maxima de tasks
+
+// O contexto de uma tarefa ARMv7 (registradores principais)
+typedef struct {
+    uint32_t r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12;
+    uint32_t sp;   // Stack Pointer
+    uint32_t lr;   // Link Register
+    uint32_t pc;   // Program Counter (onde a tarefa parou)
+    uint32_t cpsr; // Status do processador
+} context_t;
+
+// Status da tarefa
+typedef enum {
+    TASK_READY,
+    TASK_SLEEPING,
+    TASK_WAITING_IO,
+} task_state_t;
+
+typedef struct {
+    uint32_t id;
+    uint32_t sp;
+    task_state_t state;    // Estado da tarefa
+    uint32_t sleep_ticks;  // Quantos ticks faltam
+    uint32_t* stack_base;
+} tcb_t;
+
+extern tcb_t task_table[MAX_TASKS];
+extern uint32_t task_count;
+extern tcb_t* current_task;
+
+void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* stack_mem, uint32_t stack_size);
+void scheduler();
+int32_t k_task_create(void (*entry_point)(void), size_t stack_size);
+int32_t k_task_create_no_interrupt(void (*entry_point)(void), size_t stack_size);
+uint32_t k_get_current_task_id(void);
+void k_idle_task_init(void);
+void k_tick_handler(void);
+
+
+#endif
+==> ./drivers/interrupts.h <==
+#ifndef INTERRUPTS_H
+#define INTERRUPTS_H
+
+#include <stdint.h>
+
+void k_setup_interrupts();
+void k_delay_ms(uint32_t ms);
+
+#include "drivers/Express-A9/Express-A9_interrupts.h"
+
+#endif // INTERRUPTS_H
+==> ./drivers/lcd.h <==
+#ifndef LCD_H
+#define LCD_H
+
+#include <stdint.h>
+
+void k_setup_lcd();
+void put_pixel(int x, int y, uint32_t color);
+void clear_screen(uint32_t color);
+
+#endif // LCD_H
+==> ./drivers/ps2.h <==
+#ifndef PS2_H
+#define PS2_H
+
+#include <stdint.h>
+#include <stdbool.h>
+/* Protótipos das Funções do Driver */
+
+/**
+ * @brief Inicializa o hardware PL050 (KMI) e habilita interrupções.
+ */
+void k_setup_ps2(void);
+
+/**
+ * @brief Handler de interrupção para o teclado (IRQ 44).
+ * Deve ser registrado no GIC.
+ */
+void k_ps2_irq_handler(void);
+
+/**
+ * @brief Envia um comando de 8 bits para o teclado PS/2.
+ * @param cmd O comando (ex: 0xED para LEDs).
+ */
+void k_ps2_write(uint8_t cmd);
+
+/**
+ * @brief Atualiza os LEDs físicos do teclado (Caps, Num, Scroll Lock).
+ */
+void k_ps2_update_leds(void);
+
+#endif /* PS2_H */
+==> ./drivers/sd.c <==
+#include "sd.h"
+
+/* OTIMIZAÇÃO TODO: Configurar cartão SD de modo que haja um FIFO de operações de disco, ou seja,
+ * os programas fazem uma requisição de leitura/escrita no disco, e o interrupt handler do SD coordena
+ * estas operações e liberações de leitura e escrita do disco.
+ * 
+ * LOGICA GERAL:
+ * - PROGRAMA REQUISITA AO KERNEL A OPERAÇÃO COM DISCO
+ * - KERNEL ADICIONA A REQUISIÇÃO À UMA FILA
+ * - ISR DO CARTÃO SD COORDENA AS OPERAÇÕES E LOCAIS DE LEITURAS E ESCRITAS
+ * - AO FIM DA FILA, EMITE FLAG DE "DESATIVADO"
+ * 
+ * - OU SEJA, DEIXAR ESSE DRIVER MAIS ROBUSTO (e menos travado).
+ * 
+*/
+
+
+static uint32_t card_rca = 0;
+
+/* Helper: Envia comando e espera conclusão */
+int sd_send_cmd(uint32_t cmd, uint32_t arg, uint32_t flags) {
+    *MMCI_ARGUMENT = arg;
+    // O bit 10 ativa o controlador de comando no PL181
+    *MMCI_COMMAND = cmd | flags | (1 << 10);
+
+    // Limpa o status de comando (escrita no registro de Clear em 0x38)
+    *((volatile uint32_t *)(MMCI_BASE + 0x38)) = 0xFFFFFFFF;
+    
+    return 0;
+}
+
+int k_sd_init(void) {
+    // 1. Power e Clock de Inicialização (Lento: ~400KHz)
+    *MMCI_POWER = 0x03;
+    for(volatile int i=0; i<10000; i++); 
+    *MMCI_CLOCK = 0x1FF; 
+
+    
+    // 2. CMD0: Reset (Go Idle State)
+    if (sd_send_cmd(CMD0, 0, 0)) return -1;
+
+    // 3. CMD8: Send Interface Condition (Necessário para cartões modernos/QEMU)
+    // 0x1AA verifica se o cartão suporta 2.7V-3.6V
+    sd_send_cmd(CMD8, 0x1AA, 0x40); // 0x40 = espera resposta curta (R1)
+    
+    // 4. ACMD41: Inicialização e Verificação de Voltagem
+    // Como é um ACMD, precisamos enviar CMD55 antes
+    //int retry = 1000;
+    //while(retry--) {
+        sd_send_cmd(CMD55, 0, 0x40);
+        sd_send_cmd(ACMD41, 0x40100000, 0x40); // HCS + 3.3V
+        
+        //if (*MMCI_RESPONSE0 & (1 << 31)) break; // Bit Busy: 1 = Pronto
+    //}
+    //if (retry <= 0) {k_uart_print("DESISTO\n\r"); return -1;};
+
+    // 5. CMD2: Ask for CID (Identificação Única)
+    sd_send_cmd(2, 0, 0x40 | (1 << 6)); // Resposta longa (R2)
+
+    // 6. CMD3: Ask for RCA (Relative Card Address)
+    // O cartão publica o endereço que usaremos para "falar" com ele
+    sd_send_cmd(3, 0, 0x40);
+    card_rca = *MMCI_RESPONSE0 & 0xFFFF0000; // RCA está nos 16 bits superiores
+
+    // 7. CMD7: Select Card (Move para o "Transfer State")
+    // ESSENCIAL: Sem isso o cartão ignora comandos de leitura de dados
+    sd_send_cmd(7, card_rca, 0x40);
+
+    // 8. CMD16: Set Block Length (512 bytes para FAT32)
+    sd_send_cmd(16, 512, 0x40);
+
+    // 9. Aumentar o Clock para velocidade de operação (25MHz ou mais)
+    *MMCI_CLOCK = 0xC7; 
+    //k_uart_print("SD FEITO UAI\n\r");
+    return 0;
+}
+
+int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
+    
+    k_disable_interrupts(); // Seção Crítica Abaixo !!
+
+    uint32_t *dest = (uint32_t *)buffer;
+
+    // 1. Limpar status e configurar Data Path
+    *((volatile uint32_t *)(MMCI_BASE + 0x38)) = 0xFFFFFFFF;
+    *MMCI_DATA_TIMER = 0xFFFF;
+    *MMCI_DATA_LEN   = 512;
+    // Direção: Card para Host | Enable | Block Size 2^9 = 512
+    *MMCI_DATA_CTRL  = (1 << 0) | (1 << 1) | (9 << 4);
+
+    // 2. CMD17: Read Single Block
+    // No QEMU, para SDHC (imagens > 2GB ou formatadas modernas), o arg é o LBA.
+    // Se não funcionar, tente (lba * 512).
+
+    if (sd_send_cmd(CMD17, lba*512, 0x40) != 0) {
+        k_uart_print("[FILESYSTEM]: SD COMMAND FAIL\n\r"); 
+        k_enable_interrupts(); 
+        return -1;
+    }
+
+    // 3. Leitura da FIFO (Polling)
+    int words_read = 0;
+    int safety_timeout = 1000000;
+    while (words_read < 128 && safety_timeout > 0) {
+        uint32_t status = *MMCI_STATUS;
+        // Bit 21: RXDATAAVL (Existem dados para ler na FIFO)
+        if (status & (1 << 21)) {
+            dest[words_read++] = *MMCI_FIFO;
+        }
+        // Checar erros de CRC ou Timeout de dados
+        if (status & ((1 << 1) | (1 << 3))) return -1;
+        safety_timeout--;
+    }
+    k_enable_interrupts();
+    return 0;
+}
+
+int k_sd_write_sector(uint32_t lba, uint8_t *buffer) {
+    
+    k_disable_interrupts();
+    uint32_t *src = (uint32_t *)buffer;
+
+    // 1. Limpar status e configurar Data Path para ESCRITA
+    *((volatile uint32_t *)(MMCI_BASE + 0x38)) = 0xFFFFFFFF;
+    *MMCI_DATA_TIMER = 0xFFFF;
+    *MMCI_DATA_LEN   = 512;
+    
+    // Bit 1 em 0: Direção Host -> Card (Escrita)
+    // Bit 0 em 1: Enable | Bits 4-7: Block size 2^9 (512)
+    *MMCI_DATA_CTRL  = (1 << 0) | (9 << 4); 
+
+    // 2. CMD24: Write Single Block
+    if (sd_send_cmd(CMD24, lba * 512, 0x40) != 0) {
+        k_uart_print("[FILESYSTEM]: SD COMMAND FAIL\n\r"); 
+        k_enable_interrupts(); 
+        return -1;
+    }
+    
+    // 3. Enviar dados para a FIFO (Polling)
+    int words_written = 0;
+    int safety_timeout = 1000000;
+
+    while (words_written < 128 && safety_timeout > 0) {
+        uint32_t status = *MMCI_STATUS;
+
+        // Bit 20: TXFIFO_HALF_EMPTY (ou checar se há espaço na FIFO)
+        // Se a FIFO não estiver cheia, podemos escrever
+        if (!(status & (1 << 15))) { // Bit 15: TXFIFO_FULL
+            *MMCI_FIFO = src[words_written++];
+        }
+
+        // Checar erros (Timeout de escrita ou CRC)
+        if (status & ((1 << 1) | (1 << 3))) {k_enable_interrupts(); return -1;}
+        
+        safety_timeout--;
+    }
+
+    // 4. Esperar o dado ser processado pelo cartão (Bit 8: Data End)
+    while(!(*MMCI_STATUS & (1 << 8)) && safety_timeout > 0) {
+        safety_timeout--;
+    }
+    k_enable_interrupts();
+    return (words_written == 128) ? 0 : -1;
+}
+==> ./drivers/sd.h <==
+#ifndef SD_H
+#define SD_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#define MMCI_BASE       0x10005000
+
+/* Registradores PL181 */
+#define MMCI_POWER      ((volatile uint32_t *)(MMCI_BASE + 0x000))
+#define MMCI_CLOCK      ((volatile uint32_t *)(MMCI_BASE + 0x004))
+#define MMCI_ARGUMENT   ((volatile uint32_t *)(MMCI_BASE + 0x008))
+#define MMCI_COMMAND    ((volatile uint32_t *)(MMCI_BASE + 0x00C))
+#define MMCI_RESP_CMD   ((volatile uint32_t *)(MMCI_BASE + 0x010))
+#define MMCI_RESPONSE0  ((volatile uint32_t *)(MMCI_BASE + 0x014))
+#define MMCI_DATA_TIMER ((volatile uint32_t *)(MMCI_BASE + 0x024))
+#define MMCI_DATA_LEN   ((volatile uint32_t *)(MMCI_BASE + 0x028))
+#define MMCI_DATA_CTRL  ((volatile uint32_t *)(MMCI_BASE + 0x02C))
+#define MMCI_STATUS     ((volatile uint32_t *)(MMCI_BASE + 0x034))
+#define MMCI_FIFO       ((volatile uint32_t *)(MMCI_BASE + 0x080))
+
+/* Comandos SD Comuns */
+#define CMD0   0  /* GO_IDLE_STATE */
+#define CMD8   8  /* SEND_IF_COND */
+#define CMD16  16 /* SET_BLOCKLEN */
+#define CMD17  17 /* READ_SINGLE_BLOCK */
+#define CMD24  24 /* WRITE_SINGLE_BLOCK*/
+#define ACMD41 41 /* SD_SEND_OP_COND */
+#define CMD55  55 /* APP_CMD (Prefixo para ACMD) */
+
+/* Status Bits */
+#define STAT_CMD_DONE   (1 << 2)
+#define STAT_DATA_END   (1 << 8)
+#define STAT_RX_FIFO_HF (1 << 10) // FIFO Half Full
+
+/* Protótipos */
+int k_sd_init(void);
+int k_sd_read_sector(uint32_t lba, uint8_t *buffer);
+int k_sd_write_sector(uint32_t lba, uint8_t *buffer);
+
+#endif
+==> ./drivers/timer.h <==
+#ifndef TIMER_H
+#define TIMER_H
+
+#include <stdint.h>
+
+void k_setup_timers();
+
+extern volatile uint64_t system_ticks;
+
+#endif // TIMER_H
+==> ./drivers/uart.h <==
+#ifndef UART_H
+#define UART_H
+
+void k_setup_uart();
+void k_uart_putc(char c);
+void k_uart_print(char* s);
+void k_uart_print_hex(unsigned int value);
+void k_uart_printf(const char *fmt, ...);
+
+#endif // UART_H
+==> ./include/syscall.h <==
+#ifndef SYSCALL_H
+#define SYSCALL_H
+
+enum syscalls{
+    SYS_PRINT,   
+    SYS_PRINTF,
+    SYS_PUTC, 
+    SYS_GETCHAR,  
+    SYS_GETPID,   
+    SYS_YIELD,    
+    SYS_SLEEP,    
+    SYS_SPAWN,    
+    SYS_CREATE_DIRECTORY, // char* directory
+    SYS_REMOVE_DIRECTORY, // char* directory
+    SYS_RENAME_DIRECTORY, // char* directory, char* name
+    SYS_OPEN_FILE,   // uint8_t* fileptr, char* file, char read_write
+    SYS_CLOSE_FILE,  // uint8_t* fileptr
+    SYS_CREATE_FILE, // char* file, char* name 
+    SYS_REMOVE_FILE, // char* file
+    SYS_RENAME_FILE, // char* file, char* name
+    SYS_RUN_FILE,    // char* file
+    SYS_GET_ACTIVE_PROCESSES, 
+    SYS_KILL_PROCESS,    // uint32_t PID
+    SYS_MALLOC,
+    SYS_FREE,
+    SYS_REALLOC,
+    SYS_EXIT
+};
+
+#include <stdint.h>
+#include <stdarg.h>
+#include "core/filesystem.h"
+
+typedef void (*putc_func_t)(char);
+extern void k_vprintf_internal(putc_func_t putc_func, const char *fmt, va_list args);
+
+int32_t sys_spawn(void (*func)(void));
+void sys_msleep(uint32_t ms);
+void sys_print(char *msg);
+void sys_putc(char c);
+void sys_printf(char *fmt, ...);
+int32_t sys_getc();
+int32_t sys_open(char* f_name, file_t* file);
+int32_t sys_close(file_t* f);
+
+#endif
+==> ./include/unistd.c <==
+// user_lib.c ou unistd.c
+#include "syscall.h"
+#include "drivers/uart.h"
+
+int32_t syscall(int32_t num, uint32_t a1, uint32_t a2, uint32_t a3) {
+    int32_t ret;
+    asm volatile (
+        "mov r0, %[n]\n"    // Move o ID para r0
+        "mov r1, %[arg1]\n" // Move argumentos
+        "mov r2, %[arg2]\n"
+        "mov r3, %[arg3]\n"
+        "svc #0\n"          // Chama o Kernel
+        "mov %[r], r0\n"    // Pega o retorno do Kernel
+        : [r] "=r" (ret)
+        : [n] "r" (num), [arg1] "r" (a1), [arg2] "r" (a2), [arg3] "r" (a3)
+        : "r0", "r1", "r2", "r3", "memory"
+    );
+    return ret;
+}
+
+int32_t sys_spawn(void (*func)(void)) {
+    return syscall(SYS_SPAWN, (uint32_t)func, 0, 0);
+}
+
+void sys_msleep(uint32_t ms) {
+    syscall(SYS_SLEEP, ms, 0, 0);
+}
+
+
+void sys_print(char *msg) {
+    syscall(SYS_PRINT, (uint32_t)msg, 0, 0); 
+}
+
+void sys_putc(char c) {
+    syscall(SYS_PUTC, (uint32_t)c, 0, 0); 
+}
+
+void sys_printf(char* fmt, ...){
+    va_list args;
+    va_start(args, fmt);
+    
+    syscall(SYS_PRINTF, (uint32_t)fmt, (uint32_t)&args, 0);
+    
+    va_end(args);
+}
+
+int32_t sys_getc() {
+    return syscall(SYS_GETCHAR, 0, 0, 0);
+}
+
+int32_t sys_open(char* f_name, file_t* file){
+    return syscall(SYS_OPEN_FILE, (uint32_t)f_name, (uint32_t)file, 0);
+}
+
+int32_t sys_close(file_t* f){
+    return syscall(SYS_CLOSE_FILE, 0, 0, 0);
+}
+==> ./Makefile <==
+TARGET = kernel.elf
+OBJ_DIR = build
+
+# Ferramentas
+CC = arm-none-eabi-gcc
+AS = arm-none-eabi-as
+
+# Flags (Sincronizadas com o CPULator)
+CFLAGS = -mcpu=cortex-a9 -mfloat-abi=softfp -mfpu=neon-fp16 \
+         -ffreestanding -nostdlib -g -O2 -I. 
+			# -Wl, --no-warn-rwx-segments
+ASFLAGS =  -march=armv7-a -mcpu=cortex-a9 -mfpu=neon-fp16 -mfloat-abi=softfp --gdwarf2
+
+# Localizar fontes (Kernel e subpastas)
+SRCS_C = $(shell find -name "*.c")
+SRCS_S = $(shell find -name "*.s")
+
+# Mapear fontes para objetos dentro da pasta build/
+# Exemplo: kernel/main.c -> build/main.o
+OBJS = $(addprefix $(OBJ_DIR)/, $(notdir $(SRCS_C:.c=.o)))
+OBJS += $(addprefix $(OBJ_DIR)/, $(notdir $(SRCS_S:.s=.o)))
+
+# VPATH ajuda o Make a encontrar os arquivos nas subpastas
+VPATH = $(dir $(SRCS_C) $(SRCS_S))
+
+all: $(OBJ_DIR) $(TARGET)
+
+# Criar a pasta build se não existir
+$(OBJ_DIR):
+	mkdir -p $(OBJ_DIR)
+
+# Linkagem final
+$(TARGET): $(OBJS)
+	$(CC) -T kernel.ld $(OBJS) -o $(TARGET) $(CFLAGS)
+	@echo "Sucesso! O arquivo $(TARGET) foi gerado."
+
+# Compilação C -> Objeto
+$(OBJ_DIR)/%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Compilação Assembly -> Objeto
+$(OBJ_DIR)/%.o: %.s
+	$(AS) $(ASFLAGS) $< -o $@
+
+clean:
+	rm -rf $(OBJ_DIR) $(TARGET)
+	@echo "Limpeza concluída."

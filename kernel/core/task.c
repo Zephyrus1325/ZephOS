@@ -18,7 +18,7 @@ void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* sta
 
     // Ordem inversa dos POPs do Assembly:
     *(--s) = (uint32_t)task_func; // PC (carregado pelo pop {pc}^)
-    *(--s) = 0x13;                // SPSR (carregado pelo pop {r1})
+    *(--s) = 0x10;                // SPSR (carregado pelo pop {r1}) [NOTA: COLOCA AS TAREFAS NO MODO SUPERVISOR, COLOCAR 0x10 PARA USER MODE]
     
     // R12, R11, ..., R0 (carregados pelo pop {r0-r11, r12})
     for (int i = 0; i < 13; i++) {

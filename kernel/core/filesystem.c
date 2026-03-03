@@ -158,6 +158,7 @@ int k_fs_open(const char *filename, file_t *file) {
 
 int k_fs_close(file_t* file){
     k_free(file->buffer);
+    file->buffer = (uint8_t*)0;
 }
 
 int k_fs_read(file_t *file) {
@@ -276,4 +277,72 @@ int k_fs_create(const char *filename) {
         }
     }
     return -1;
+}
+
+void free_cluster_chain(uint32_t start_cluster) {
+    uint32_t current = start_cluster;
+    uint32_t next;
+    uint8_t fat_buffer[512];
+
+    while (current >= 2 && current < 0x0FFFFFF8) {
+        // 1. Descobrir qual é o próximo cluster antes de apagar o atual
+        uint32_t fat_offset = current * 4;
+        uint32_t fat_sector = partition_begin_lba + bpb.reserved_sectors + (fat_offset / 512);
+        uint32_t entry_offset = fat_offset % 512;
+
+        if (k_sd_read_sector(fat_sector, fat_buffer) != 0) break;
+        
+        next = (*(uint32_t *)&fat_buffer[entry_offset]) & 0x0FFFFFFF;
+
+        // 2. Marcar o cluster atual como livre (0)
+        mark_cluster_in_fat(current, 0x00000000);
+
+        // 3. Mover para o próximo
+        current = next;
+    }
+}
+
+int k_fs_delete(const char *filename) {
+    char fat_name[11];
+    format_to_fat_name(filename, fat_name);
+    
+    uint8_t dir_buffer[512];
+    uint32_t root_lba = cluster_to_lba(bpb.root_cluster);
+
+    if (k_sd_read_sector(root_lba, dir_buffer) != 0) return -1;
+
+    DirectoryEntry *entries = (DirectoryEntry *)dir_buffer;
+    for (int i = 0; i < 16; i++) {
+        if (entries[i].name[0] == 0x00) break; // Fim da lista
+        if (entries[i].name[0] == 0xE5) continue; // Já deletado
+
+        // Comparar nome
+        bool match = true;
+        for (int k = 0; k < 11; k++) {
+            if (entries[i].name[k] != fat_name[k]) {
+                match = false;
+                break;
+            }
+        }
+
+        if (match) {
+            // 1. Obter o primeiro cluster do arquivo
+            uint32_t first_cluster = (entries[i].cluster_high << 16) | entries[i].cluster_low;
+
+            // 2. Liberar todos os clusters na FAT
+            free_cluster_chain(first_cluster);
+
+            // 3. Marcar a entrada do diretório como deletada (0xE5)
+            entries[i].name[0] = 0xE5;
+
+            // 4. Salvar o setor de diretório de volta no SD
+            if (k_sd_write_sector(root_lba, dir_buffer) != 0) return -2;
+
+            k_uart_print("FS: Arquivo deletado com sucesso!\r\n");
+            return 0;
+        }
+    }
+
+    k_uart_print("FS: Arquivo para excluir nao encontrado.\r\n");
+    return -3;
 }

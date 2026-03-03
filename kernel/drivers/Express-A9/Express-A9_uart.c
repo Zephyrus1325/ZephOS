@@ -49,7 +49,7 @@ extern void k_enable_interrupts();
 typedef void (*putc_func_t)(char);
 extern void k_vprintf_internal(putc_func_t putc_func, const char *fmt, va_list args);
 
-void k_uart_printf(const char *fmt, ...) {
+void k_uart_printf(const char*fmt, ...) {
     va_list args;
     va_start(args, fmt);
     
