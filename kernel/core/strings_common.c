@@ -48,10 +48,12 @@ static void itoa(unsigned int value, char* str, int base) {
 // Tipo de função que aceita um caractere
 typedef void (*putc_func_t)(char);
 
+extern void k_uart_print(const char* str);
+
 void k_vprintf_internal(putc_func_t putc_func, const char *fmt, va_list args) {
     char buf[32];
     char c;
-
+    if(fmt < (char*) 0x100){k_uart_print("[KERNEL]: ERROR: INVALID FORMAT STRING\n\r"); return;}
     while ((c = *fmt++)) {
         if (c != '%') {
             putc_func(c);

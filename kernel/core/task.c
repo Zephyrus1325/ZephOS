@@ -8,7 +8,7 @@
     @param *tcb Ponteiro para o tcb responsável por armazenar esta tarefa
     @param id ID a ser atrelado a nova tarefa
     @param stack_mem Ponteiro para o stack da tarefa
-    @param stack_size Total de bytes a ser alocados para o stack da tarefa
+    @param stack_size Total de palavras a ser alocados para o stack da tarefa
 
 */
 void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* stack_mem, uint32_t stack_size) {
@@ -18,7 +18,7 @@ void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* sta
 
     // Ordem inversa dos POPs do Assembly:
     *(--s) = (uint32_t)task_func; // PC (carregado pelo pop {pc}^)
-    *(--s) = 0x13;                // SPSR (carregado pelo pop {r1})
+    *(--s) = 0x10;                // SPSR (carregado pelo pop {r1}) [NOTA: COLOCA AS TAREFAS NO MODO SUPERVISOR, COLOCAR 0x10 PARA USER MODE]
     
     // R12, R11, ..., R0 (carregados pelo pop {r0-r11, r12})
     for (int i = 0; i < 13; i++) {
@@ -51,7 +51,7 @@ void scheduler(void) {
     // Note que usamos um int local para a busca para não estragar o índice global prematuramente
     static int current_idx = 0;
     int search_idx = current_idx;
-
+    
     // Tentamos encontrar uma tarefa READY no máximo 'task_count' vezes
     for (int i = 0; i < task_count; i++) {
         // Incrementa e rotaciona (sem usar %)
@@ -76,7 +76,7 @@ void scheduler(void) {
     Cria uma tarefa nova tarefa
 
     @param *entry_point Ponteiro para função da nova tarefa
-    @param stack_size Tamanho do stack da nova tarefa, em bytes
+    @param stack_size Tamanho do stack da nova tarefa, em words
 
     @return ID da nova função ou código de erro
 */
@@ -115,9 +115,9 @@ int32_t k_task_create_no_interrupt(void (*entry_point)(void), size_t stack_size)
     // Aloca memória para a pilha da nova task no HEAP
     // STACK_SIZE * 4 porque malloc geralmente recebe tamanho em bytes
     uint32_t *new_stack = (uint32_t *)k_malloc_no_interrupt(stack_size * sizeof(uint32_t));
-
+    
     if (new_stack == NULL){
-        k_uart_print("[KERNEL] ERROR CREATING TASK: OUT OF MEMORY\n\r");
+        k_uart_print("[KERNEL]: ERROR CREATING TASK: OUT OF MEMORY\n\r");
         return -2;
     } // Erro: Out of Memory na SRAM
 
@@ -125,7 +125,7 @@ int32_t k_task_create_no_interrupt(void (*entry_point)(void), size_t stack_size)
 
     // Inicializa passando o ponteiro do Heap
     k_task_init(new_tcb, task_count + 1, entry_point, new_stack, stack_size);
-
+    
     task_count++;
     return new_tcb->id;
 }

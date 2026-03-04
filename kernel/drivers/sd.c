@@ -1,4 +1,6 @@
 #include "sd.h"
+#include "drivers/interrupts.h"
+#include "drivers/uart.h"
 
 /* OTIMIZAÇÃO TODO: Configurar cartão SD de modo que haja um FIFO de operações de disco, ou seja,
  * os programas fazem uma requisição de leitura/escrita no disco, e o interrupt handler do SD coordena

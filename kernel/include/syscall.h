@@ -2,7 +2,8 @@
 #define SYSCALL_H
 
 enum syscalls{
-    SYS_WRITE,   
+    SYS_PRINT,   
+    SYS_PRINTF,
     SYS_PUTC, 
     SYS_GETCHAR,  
     SYS_GETPID,   
@@ -28,15 +29,18 @@ enum syscalls{
 
 #include <stdint.h>
 #include <stdarg.h>
+#include "core/filesystem.h"
 
 typedef void (*putc_func_t)(char);
 extern void k_vprintf_internal(putc_func_t putc_func, const char *fmt, va_list args);
 
 int32_t sys_spawn(void (*func)(void));
 void sys_msleep(uint32_t ms);
-void sys_write(char *msg);
+void sys_print(char *msg);
 void sys_putc(char c);
 void sys_printf(char *fmt, ...);
 int32_t sys_getc();
+int32_t sys_open(char* f_name, file_t* file);
+int32_t sys_close(file_t* f);
 
 #endif

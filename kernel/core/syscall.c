@@ -4,6 +4,10 @@
 #include "core/task.h"
 #include "drivers/uart.h"
 #include "core/fifo.h"
+#include "core/filesystem.h"
+#include "drivers/interrupts.h"
+
+extern void k_vprintf_internal(putc_func_t putc_func, const char *fmt, va_list args);
 
 /*
     Esta função é chamada pelo Assembly (svc_handler)
@@ -18,7 +22,7 @@
 int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
     switch (id) {
         
-        case SYS_WRITE:
+        case SYS_PRINT:
             /* arg1 contém o ponteiro para a string na memória da tarefa */
             k_uart_print((char *)arg1);
             return 0; // Sucesso
@@ -28,6 +32,12 @@ int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg
             k_uart_putc((char) arg1);
             return 0; // Sucesso
 
+        case SYS_PRINTF:
+            k_disable_interrupts();
+            k_vprintf_internal(k_uart_putc, (const char*)arg1, *(va_list*)arg2);
+            k_enable_interrupts();
+            return 0;
+        
         case SYS_GETCHAR:
             // Tenta pegar o caractere da FIFO
             // Se não tiver nada, retorna -1 para o usuário
@@ -53,6 +63,12 @@ int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg
 
         case SYS_SPAWN:
             return k_task_create((void (*)(void))arg1, arg2);
+
+        case SYS_OPEN_FILE:
+            return (int32_t) k_fs_open((const char*)arg1, (file_t*)arg2);
+
+        case SYS_CLOSE_FILE:
+            return (int32_t) k_fs_close((file_t*)arg2);
 
         default:
             /* Caso a tarefa peça algo que não existe */

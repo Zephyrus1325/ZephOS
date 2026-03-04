@@ -64,7 +64,10 @@ typedef struct {
 int k_fs_init(void);
 void k_fs_ls(void);
 int k_fs_open(const char *filename, file_t *file);
+int k_fs_close(file_t *file);
 int k_fs_read(file_t *file);
 int k_fs_create(const char *filename);
 int k_fs_save_file(const char *filename, uint8_t *data, uint32_t size);
+void free_cluster_chain(uint32_t start_cluster);
+int k_fs_delete(const char *filename);
 #endif

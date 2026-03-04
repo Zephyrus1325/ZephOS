@@ -4,7 +4,7 @@
 
 _vectors:
     B _start                 // 0x00: Reset (Ponto de entrada)
-    B . // handler_undef     // 0x04: Instrução indefinida
+    B handler_undef          // 0x04: Instrução indefinida
     B svc_handler            // 0x08: System Call (SVC)
     B . // handler_prefetch  // 0x0C: Erro de instrução
     B data_abort_handler     // 0x10: Erro de dados (Ex: acesso à memória inválida)
@@ -50,31 +50,55 @@ zero_loop:
     B .                          // Caso a Main retorne, trava em loop infinito
 
 svc_handler:
-    /* No SVC, o LR não precisa de ajuste */
-    push {lr}           /* Salva PC de retorno */
-    mrs r12, spsr
-    push {r12}          /* Salva SPSR (CPSR da tarefa) */
+    /* 1. Salvar o estado crítico do processador */
+    push {lr}             @ Salva o endereço de retorno da tarefa
+    mrs r12, spsr         @ Lê o status da tarefa (CPSR dela)
+    push {r12}            @ Guarda o SPSR na pilha
 
-    push {r0-r11, r12}  /* Salva registradores */
-    push {lr}           /* Salva LR original da tarefa */
+    /* 2. Salvar todos os registadores da tarefa (Contexto) */
+    /* Importante: r0-r3 (argumentos) e r12 são salvos aqui */
+    push {r0-r11, r12}    
+    push {lr}             @ Guarda o LR original da tarefa (User Mode LR)
 
+    /* 3. Salvar o Stack Pointer (SP) no TCB da tarefa atual */
     ldr r4, =current_task
     ldr r5, [r4]
-    str sp, [r5, #4]
+    str sp, [r5, #4]      @ Assume que tcb_t->sp está no offset 4
 
+    /* 4. PREPARAR ARGUMENTOS PARA O C (O PONTO CRÍTICO) */
+    /* A pilha agora está assim (do topo para baixo):
+       SP + 0:  LR_user
+       SP + 4:  R0 (ID da Syscall)
+       SP + 8:  R1 (Arg1 / Endereço da String)
+       SP + 12: R2 (Arg2 / va_list)
+       SP + 16: R3 (Arg3)
+       ... restantes registadores ...
+    */
+    ldr r0, [sp, #4]      @ Recarrega o ID em R0
+    ldr r1, [sp, #8]      @ Recarrega o Arg1 em R1 (Ponteiro da String)
+    ldr r2, [sp, #12]     @ Recarrega o Arg2 em R2
+    ldr r3, [sp, #16]     @ Recarrega o Arg3 em R3
+
+    /* 5. Chamar o despachante em C */
     bl k_svc_dispatcher
 
+    /* 6. Restaurar o Stack Pointer */
+    /* (O scheduler pode ter mudado o current_task, por isso recarregamos) */
     ldr r4, =current_task
     ldr r5, [r4]
-    ldr sp, [r5, #4]
+    ldr sp, [r5, #4]      @ Recupera o SP do (novo) current_task
 
+    /* 7. Colocar o valor de retorno (R0 do C) no R0 salvo na pilha */
+    /* Assim, quando fizermos o pop r0-r11, a tarefa recebe o retorno */
     str r0, [sp, #4]
 
-    pop {lr}
-    pop {r0-r11, r12}
-    pop {r1}
-    msr spsr_cxsf, r1
-    ldmfd sp!, {pc}^
+    /* 8. Restaurar o contexto e retornar */
+    pop {lr}              @ Restaura LR original
+    pop {r0-r11, r12}     @ Restaura registadores (R0 agora tem o retorno do C)
+    pop {r1}              @ Recupera o SPSR salvo
+    msr spsr_cxsf, r1     @ Restaura o SPSR para o retorno
+    
+    ldmfd sp!, {pc}^      @ Retorna para a tarefa restaurando o CPSR
 
 irq_handler:
     /* 1. Ajuste do LR para retorno de IRQ */
@@ -122,6 +146,7 @@ irq_handler:
     ldmfd sp!, {pc}^           /* Restaura PC e CPSR simultaneamente */
 
 data_abort_handler:
+handler_undef:
     // 1. Recuperar o endereço da instrução que falhou (LR - 8)
     SUB LR, LR, #8
     
@@ -135,7 +160,6 @@ data_abort_handler:
     // O LR (instrução) vai como 3º argumento (R2)
     MOV R2, LR
     B k_panic_data_abort
-
 
 .global start_first_task
 start_first_task:
