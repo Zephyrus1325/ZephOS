@@ -21,6 +21,7 @@ typedef enum {
     TASK_READY,
     TASK_SLEEPING,
     TASK_WAITING_IO,
+    TASK_TERMINATED
 } task_state_t;
 
 typedef struct {

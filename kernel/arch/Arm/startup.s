@@ -50,55 +50,47 @@ zero_loop:
     B .                          // Caso a Main retorne, trava em loop infinito
 
 svc_handler:
-    /* 1. Salvar o estado crítico do processador */
-    push {lr}             @ Salva o endereço de retorno da tarefa
-    mrs r12, spsr         @ Lê o status da tarefa (CPSR dela)
-    push {r12}            @ Guarda o SPSR na pilha
+    /* 1. Salvar o estado crítico */
+    push {lr}             @ Endereço de retorno
+    mrs r12, spsr         @ Status da tarefa
+    push {r12}            @ Guarda o SPSR
 
-    /* 2. Salvar todos os registadores da tarefa (Contexto) */
-    /* Importante: r0-r3 (argumentos) e r12 são salvos aqui */
+    /* 2. Salvar contexto completo da tarefa */
+    /* R0-R3 são os argumentos da Syscall vindos da Task */
     push {r0-r11, r12}    
-    push {lr}             @ Guarda o LR original da tarefa (User Mode LR)
+    push {lr}             @ LR de modo usuário
 
-    /* 3. Salvar o Stack Pointer (SP) no TCB da tarefa atual */
+    /* 3. Salvar o SP no TCB da tarefa atual */
     ldr r4, =current_task
     ldr r5, [r4]
-    str sp, [r5, #4]      @ Assume que tcb_t->sp está no offset 4
+    str sp, [r5, #4]      @ Salva SP no offset 4 da struct tcb_t
 
-    /* 4. PREPARAR ARGUMENTOS PARA O C (O PONTO CRÍTICO) */
-    /* A pilha agora está assim (do topo para baixo):
-       SP + 0:  LR_user
-       SP + 4:  R0 (ID da Syscall)
-       SP + 8:  R1 (Arg1 / Endereço da String)
-       SP + 12: R2 (Arg2 / va_list)
-       SP + 16: R3 (Arg3)
-       ... restantes registadores ...
-    */
-    ldr r0, [sp, #4]      @ Recarrega o ID em R0
-    ldr r1, [sp, #8]      @ Recarrega o Arg1 em R1 (Ponteiro da String)
-    ldr r2, [sp, #12]     @ Recarrega o Arg2 em R2
-    ldr r3, [sp, #16]     @ Recarrega o Arg3 em R3
+    /* 4. PREPARAR ARGUMENTOS PARA O C (R0, R1, R2, R3) */
+    /* Recuperamos os valores originais que colocamos na pilha no passo 2 */
+    /* A pilha está assim: [LR_usr, R0, R1, R2, R3, R4...] */
+    ldr r0, [sp, #4]      @ ID da Syscall
+    ldr r1, [sp, #8]      @ Arg 1
+    ldr r2, [sp, #12]     @ Arg 2
+    ldr r3, [sp, #16]     @ Arg 3 (O quarto parâmetro, ex: FILE*)
 
-    /* 5. Chamar o despachante em C */
+    /* 5. Chamar o despachante em C com 4 argumentos */
     bl k_svc_dispatcher
 
-    /* 6. Restaurar o Stack Pointer */
-    /* (O scheduler pode ter mudado o current_task, por isso recarregamos) */
+    /* 6. Restaurar o SP (pode ser de uma tarefa diferente agora) */
     ldr r4, =current_task
     ldr r5, [r4]
-    ldr sp, [r5, #4]      @ Recupera o SP do (novo) current_task
+    ldr sp, [r5, #4]      
 
-    /* 7. Colocar o valor de retorno (R0 do C) no R0 salvo na pilha */
-    /* Assim, quando fizermos o pop r0-r11, a tarefa recebe o retorno */
+    /* 7. Colocar o retorno (R0 do C) no slot do R0 da tarefa na pilha */
     str r0, [sp, #4]
 
-    /* 8. Restaurar o contexto e retornar */
-    pop {lr}              @ Restaura LR original
-    pop {r0-r11, r12}     @ Restaura registadores (R0 agora tem o retorno do C)
-    pop {r1}              @ Recupera o SPSR salvo
-    msr spsr_cxsf, r1     @ Restaura o SPSR para o retorno
+    /* 8. Restaurar e retornar */
+    pop {lr}              
+    pop {r0-r11, r12}     
+    pop {r1}              
+    msr spsr_cxsf, r1     
     
-    ldmfd sp!, {pc}^      @ Retorna para a tarefa restaurando o CPSR
+    ldmfd sp!, {pc}^      @ Retorna para a tarefa (CPSR restaurado)
 
 irq_handler:
     /* 1. Ajuste do LR para retorno de IRQ */

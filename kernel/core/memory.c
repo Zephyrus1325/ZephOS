@@ -183,3 +183,60 @@ size_t k_get_max_free_block() {
     k_enable_interrupts();
     return max_block;
 }
+
+void* memcpy(void* dest, const void* src, size_t n) {
+    uint32_t* d32 = (uint32_t*)dest;
+    const uint32_t* s32 = (const uint32_t*)src;
+
+    // Se a origem e o destino estiverem alinhados em 4 bytes
+    if (((uintptr_t)dest % 4 == 0) && ((uintptr_t)src % 4 == 0)) {
+        // Copia blocos de 4 bytes
+        while (n >= 4) {
+            *d32++ = *s32++;
+            n -= 4;
+        }
+    }
+
+    // Copia o que sobrar (ou se não estiver alinhado) byte a byte
+    uint8_t* d8 = (uint8_t*)d32;
+    uint8_t* s8 = (uint8_t*)s32;
+
+    while (n > 0) {
+        *d8++ = *s8++;
+        n--;
+    }
+
+    return dest;
+}
+
+int memcmp(const void *s1, const void *s2, size_t n) {
+    const uint32_t *p1_32 = (const uint32_t *)s1;
+    const uint32_t *p2_32 = (const uint32_t *)s2;
+
+    // Se ambos os ponteiros estiverem alinhados em 4 bytes (32-bit boundary)
+    if (((uintptr_t)s1 % 4 == 0) && ((uintptr_t)s2 % 4 == 0)) {
+        while (n >= 4) {
+            if (*p1_32 != *p2_32) {
+                // Se encontrar diferença na word, sai para comparar byte a byte
+                break;
+            }
+            p1_32++;
+            p2_32++;
+            n -= 4;
+        }
+    }
+
+    // Compara o restante (ou se não estiver alinhado) byte a byte
+    const unsigned char *p1_8 = (const unsigned char *)p1_32;
+    const unsigned char *p2_8 = (const unsigned char *)p2_32;
+
+    while (n--) {
+        if (*p1_8 != *p2_8) {
+            return (int)(*p1_8 - *p2_8);
+        }
+        p1_8++;
+        p2_8++;
+    }
+
+    return 0;
+}

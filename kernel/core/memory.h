@@ -19,5 +19,6 @@ void k_free(void *ptr);
 size_t k_get_free_heap();
 size_t k_get_max_free_block();
 size_t k_get_free_heap_no_interrupt();
-
+void* memcpy(void* dest, const void* src, size_t n);
+int memcmp(const void *s1, const void *s2, size_t n);
 #endif

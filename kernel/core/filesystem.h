@@ -37,13 +37,6 @@ typedef struct {
     char     fs_type[8];
 } __attribute__((packed)) FAT32_BPB;
 
-typedef struct file_t {
-    char name[32];
-    uint32_t size;
-    uint32_t first_cluster;
-    bool is_directory;
-} file_t;
-
 typedef struct {
     uint8_t  name[11];      // Nome 8.3
     uint8_t  attr;          // Atributos
@@ -59,23 +52,27 @@ typedef struct {
     uint32_t file_size;     // Tamanho em bytes
 } __attribute__((packed)) DirectoryEntry;
 
-/* Retornos: 0 para Sucesso, -1 para Erro */
+typedef struct {
+    char     name[11];
+    uint32_t size;
+    uint32_t first_cluster;
+    uint32_t current_cluster; // Cluster onde o cursor está agora
+    uint32_t fpos;            // Posição global no arquivo (0 a size)
+    uint32_t sector_in_cluster; // Qual setor do cluster atual estamos
+    uint8_t  buffer[512];     // Buffer de setor para otimizar pequenas leituras
+    bool     eof;
+} FILE; // Renomeado para seguir o padrão C
 
-int k_fs_init(void);
-void k_fs_ls(void);
-void free_cluster_chain(uint32_t start_cluster);
-int k_fs_delete(const char *filename);
-int k_fs_open(const char *filename, file_t *file);
-int k_fs_close(file_t *file);
-int k_fs_read(file_t *file);
-int k_fs_create(const char *filename);
-int k_fs_save_file(const char *filename, uint8_t *data, uint32_t size);
+// Protótipos padrão stdio
+int    k_fs_init(void);
+FILE* k_fopen(const char* filename, const char* mode);
+size_t k_fread(void* ptr, size_t size, size_t nmemb, FILE* stream);
+int    k_fclose(FILE* fp);
+int    k_fgetc(FILE* fp);
+char* k_fgets(char* str, int n, FILE* fp);
+int    k_feof(FILE* fp);
 
-
-file_t* k_fopen(const char* file_name, const char* mode);
-int32_t k_fclose(file_t* file);
-size_t k_fread(void *ptr, size_t elem_size, size_t num_elem, file_t* file);
-char* k_fgets(char* str, uint32_t n, file_t* file);
-int32_t k_fgetc(file_t file);
-int32_t k_remove(const char *filename);
+// Funções auxiliares/administrativas
+void   k_fs_ls(void);
+int    k_remove(const char *filename);
 #endif
