@@ -40,7 +40,15 @@ void sys_print(char *msg);
 void sys_putc(char c);
 void sys_printf(char *fmt, ...);
 int32_t sys_getc();
-int32_t sys_open(char* f_name, file_t* file);
-int32_t sys_close(file_t* f);
+int32_t sys_fsopen(char* f_name, file_t* file);
+int32_t sys_fsclose(file_t* f);
+
+// Coisas novas:
+file_t* sys_fopen(const char* file_name, const char* mode);
+int32_t sys_fclose(file_t* file_ptr);
+size_t sys_fread(void *ptr, size_t elem_size, size_t num_elem, file_t* file_ptr);
+char* sys_fgets(char* str, uint32_t n, file_t* f);
+int32_t sys_fgetc(file_t f);
+int32_t sys_remove(const char* file_name);
 
 #endif

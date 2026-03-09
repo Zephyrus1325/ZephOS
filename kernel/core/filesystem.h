@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 typedef struct {
     uint8_t  jmp[3];
@@ -40,7 +41,6 @@ typedef struct file_t {
     char name[32];
     uint32_t size;
     uint32_t first_cluster;
-    uint8_t* buffer;
     bool is_directory;
 } file_t;
 
@@ -63,11 +63,19 @@ typedef struct {
 
 int k_fs_init(void);
 void k_fs_ls(void);
+void free_cluster_chain(uint32_t start_cluster);
+int k_fs_delete(const char *filename);
 int k_fs_open(const char *filename, file_t *file);
 int k_fs_close(file_t *file);
 int k_fs_read(file_t *file);
 int k_fs_create(const char *filename);
 int k_fs_save_file(const char *filename, uint8_t *data, uint32_t size);
-void free_cluster_chain(uint32_t start_cluster);
-int k_fs_delete(const char *filename);
+
+
+file_t* k_fopen(const char* file_name, const char* mode);
+int32_t k_fclose(file_t* file);
+size_t k_fread(void *ptr, size_t elem_size, size_t num_elem, file_t* file);
+char* k_fgets(char* str, uint32_t n, file_t* file);
+int32_t k_fgetc(file_t file);
+int32_t k_remove(const char *filename);
 #endif

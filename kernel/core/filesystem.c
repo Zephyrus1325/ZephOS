@@ -118,66 +118,6 @@ int k_fs_init(void) {
     return 0;
 }
 
-int k_fs_open(const char *filename, file_t *file) {
-    char fat_name[11];
-    format_to_fat_name(filename, fat_name);
-    
-    uint8_t buffer[512*512];
-    uint32_t current_lba = cluster_to_lba(bpb.root_cluster);
-
-    //k_uart_print("ABAEDAEFASDd\n\r");
-    //k_uart_print("ABAEDAEFASDd2\n\r");
-    if (k_sd_read_sector(current_lba, buffer) != 0) {k_uart_print("[FILESYSTEM]: SD SECTOR READ FAIL\n\r"); return -2;}
-    //k_uart_print("AAAAAAAAA\n\r");
-    DirectoryEntry *entry = (DirectoryEntry *)buffer;
-    for (int i = 0; i < 16; i++) {
-        //k_uart_printf("Entry: 0x%x\n\r", entry[i].name[0]);
-        if (entry[i].name[0] == 0x00) break;
-        if (entry[i].name[0] == 0xE5) continue;
-
-        bool match = true;
-        for (int k = 0; k < 11; k++) {
-            //k_uart_printf("%c | %c\n\r", entry[i].name[k], fat_name[k]);
-            if (entry[i].name[k] != fat_name[k]) {
-                match = false;
-                //k_uart_print("AFF DEU RUIM\n\r");
-                break;
-            }
-        }
-
-        if (match) {
-            file->size = entry[i].file_size;
-            file->first_cluster = (entry[i].cluster_high << 16) | entry[i].cluster_low;
-            file->buffer = (uint8_t*) k_malloc(((file->size + 511) & ~511) + 1); // Aloca o próximo multiplo de 512 bytes + 1 (O cartão SD le em blocos de 512 bytes)
-            if(k_fs_read(file)){return -3;}
-            return 0;
-        }
-    }
-    return -4;
-}
-
-int k_fs_close(file_t* file){
-    k_free(file->buffer);
-    file->buffer = (uint8_t*)0;
-}
-
-int k_fs_read(file_t *file) {
-    
-    uint32_t current_cluster = file->first_cluster;
-    uint32_t buffer_offset = 0;
-    
-    while (current_cluster < 0x0FFFFFF8) {
-        uint32_t lba = cluster_to_lba(current_cluster);
-        for (int s = 0; s < bpb.sectors_per_cluster; s++) {
-            if (k_sd_read_sector(lba + s, file->buffer + buffer_offset) != 0) return -1;
-            buffer_offset += 512;
-        }
-        
-        current_cluster = get_next_cluster(current_cluster);
-    }
-    return 0;
-}
-
 void k_fs_ls() {
     uint8_t buffer[512];
     if (k_sd_read_sector(cluster_to_lba(bpb.root_cluster), buffer) != 0) return;
@@ -302,7 +242,7 @@ void free_cluster_chain(uint32_t start_cluster) {
     }
 }
 
-int k_fs_delete(const char *filename) {
+int32_t k_remove(const char *filename) {
     char fat_name[11];
     format_to_fat_name(filename, fat_name);
     
@@ -346,3 +286,68 @@ int k_fs_delete(const char *filename) {
     k_uart_print("FS: Arquivo para excluir nao encontrado.\r\n");
     return -3;
 }
+
+file_t* k_fopen(const char* file_name, const char* mode){
+    char fat_name[11];
+    format_to_fat_name(file_name, fat_name);
+    
+    uint8_t buffer[512*512];
+    uint32_t current_lba = cluster_to_lba(bpb.root_cluster);
+
+    file_t* file = k_malloc(sizeof(file_t));    // Aloca espaço para os metadados do arquivo
+
+    if (k_sd_read_sector(current_lba, buffer) != 0) {k_uart_print("[FILESYSTEM]: SD SECTOR READ FAIL\n\r"); return NULL;}
+
+    DirectoryEntry *entry = (DirectoryEntry* )buffer;
+    for (int i = 0; i < 16; i++) {
+        if (entry[i].name[0] == 0x00) break;
+        if (entry[i].name[0] == 0xE5) continue;
+
+        bool match = true;
+
+        for (int k = 0; k < 11; k++) {
+            if (entry[i].name[k] != fat_name[k]) {
+                match = false;
+                break;
+            }
+        }
+
+        if (match) {
+            file->size = entry[i].file_size;
+            file->first_cluster = (entry[i].cluster_high << 16) | entry[i].cluster_low;
+            return file;
+        }
+    }
+    return NULL;
+}
+
+int32_t k_fclose(file_t* file){
+    k_free(file);
+    file = NULL;
+}
+
+size_t k_fread(void* ptr, size_t elem_size, size_t num_elem, file_t* file){
+    
+    uint32_t current_cluster = file->first_cluster;
+    uint32_t buffer_offset = 0;
+    
+    size_t read_remaining = elem_size * num_elem;
+
+    while (current_cluster < 0x0FFFFFF8) {
+        uint32_t lba = cluster_to_lba(current_cluster);
+        for (int s = 0; s < bpb.sectors_per_cluster; s++) {
+            if (k_sd_read_sector(lba + s, (uint8_t*)ptr + buffer_offset) != 0) return buffer_offset;
+            buffer_offset += 512;
+        
+        }
+        
+        current_cluster = get_next_cluster(current_cluster);
+    }
+    return 0;
+}
+
+char* k_fgets(char* str, uint32_t n, file_t* file);
+int32_t k_fgetc(file_t file);
+
+
+

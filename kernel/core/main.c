@@ -18,6 +18,8 @@ extern void k_uart_print_no_interrupt(char* s);
 
 void task1(){
     sys_printf("Hello! Numba: %d\n\r", 1000);
+    
+
     while(1){
         sys_msleep(999);
     }
