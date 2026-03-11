@@ -21,13 +21,13 @@ void task1(void) {
     FILE *fp;
     int count = 0;
 
-    printf("--- Iniciando Task1 (User Mode) ---\n\r");
-
+    //printf("--- Iniciando Task1 (User Mode) ---\n\r");
+    
     // 1. Tentar abrir um arquivo no SD Card
-    fp = fopen("TESTE.TXT", "r");
+    fp = fopen("TEST.TXT", "r");
     
     if (fp == NULL) {
-        printf("Erro: Nao foi possivel abrir TESTE.TXT\n\r");
+        printf("Erro: Nao foi possivel abrir TEST.TXT\n\r");
         // Se falhar, entra em loop de erro
         while(1) { msleep(1000); }
     }

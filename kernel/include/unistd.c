@@ -38,3 +38,11 @@ int putchar(int character) {
 void msleep(uint32_t ms) {
     _syscall(SYS_SLEEP, ms, 0, 0);
 }
+
+int fclose(FILE* stream) {
+    return _syscall(SYS_FCLOSE, (uint32_t)stream, 0, 0);
+}
+
+int getpid(void) {
+    return _syscall(SYS_GETPID, 0, 0, 0);
+}

@@ -31,7 +31,7 @@ $(OBJ_DIR):
 
 # Linkagem final
 $(TARGET): $(OBJS)
-	$(CC) -T kernel.ld $(OBJS) -o $(TARGET) $(CFLAGS)
+	$(CC) -T kernel.ld $(OBJS) -o $(TARGET) $(CFLAGS) -lgcc
 	@echo "Sucesso! O arquivo $(TARGET) foi gerado."
 
 # Compilação C -> Objeto
