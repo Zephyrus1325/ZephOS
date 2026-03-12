@@ -6,8 +6,11 @@
 #include "drivers/uart.h"
 #include "drivers/interrupts.h"
 
+typedef void (*putc_func_t)(char);
+extern void k_vprintf_internal(putc_func_t putc_func, const char *fmt, va_list args);
 
 /* --- Despachante de Syscalls do Kernel --- */
+// Função Atômica (aka: não vão acontecer interrupções dentro dela)
 int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
     switch (id) {
         
@@ -19,10 +22,8 @@ int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg
             return (int32_t)k_fifo_get();
 
         case SYS_PRINTF:
-            //k_disable_interrupts();
             // arg1: fmt, arg2: va_list pointer
             k_vprintf_internal(k_uart_putc, (const char*)arg1, *(va_list*)arg2);
-            //k_enable_interrupts();
             return 0;
 
         case SYS_GETPID:
@@ -46,7 +47,6 @@ int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg
 
         case SYS_FOPEN:
             // arg1: filename, arg2: mode
-            k_uart_printf_no_interrupt("[KERNEL]: FOPEN CALLED\n\r");
             return (int32_t)k_fopen((const char*)arg1, (const char*)arg2);
 
         case SYS_FCLOSE:

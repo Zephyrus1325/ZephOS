@@ -21,8 +21,9 @@ void task1(void) {
     FILE *fp;
     int count = 0;
 
-    //printf("--- Iniciando Task1 (User Mode) ---\n\r");
-    
+    printf("--- Iniciando Task1 (User Mode) ---\n\r");
+    printf("--- Iniciando Task1 (User Mode) ---\n\r");
+    printf("--- Iniciando Task1 (User Mode) ---\n\r");
     // 1. Tentar abrir um arquivo no SD Card
     fp = fopen("TEST.TXT", "r");
     

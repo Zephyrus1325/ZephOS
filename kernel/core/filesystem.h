@@ -60,6 +60,7 @@ typedef struct {
     uint32_t fpos;            // Posição global no arquivo (0 a size)
     uint32_t sector_in_cluster; // Qual setor do cluster atual estamos
     uint8_t  buffer[512];     // Buffer de setor para otimizar pequenas leituras
+    char mode[4];                // Modo atual de leitura/escrita
     bool     eof;
 } FILE; // Renomeado para seguir o padrão C
 
