@@ -2,6 +2,8 @@
 #include "task.h"
 #include "include/syscall.h"
 #include "core/memory.h"
+#include "drivers/uart.h"
+
 /*
     Configura e inicia uma nova tarefa no sistema
 

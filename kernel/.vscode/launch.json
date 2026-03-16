@@ -1,24 +1,18 @@
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "C/C++ Runner: Debug Session",
-      "type": "cppdbg",
-      "request": "launch",
-      "args": [],
-      "stopAtEntry": false,
-      "externalConsole": true,
-      "cwd": "c:/Users/Marco/Documents/ProgrammingProjects/ZephOS/kernel/core",
-      "program": "c:/Users/Marco/Documents/ProgrammingProjects/ZephOS/kernel/core/build/Debug/outDebug",
-      "MIMode": "gdb",
-      "miDebuggerPath": "gdb",
-      "setupCommands": [
-        {
-          "description": "Enable pretty-printing for gdb",
-          "text": "-enable-pretty-printing",
-          "ignoreFailures": true
-        }
+  {
+      "version": "0.2.0",
+      "configurations": [
+            {
+                "name": "Run Program",
+                "type": "cppdbg",
+                "request": "launch",
+                "program": "${workspaceFolder}/kernel.elf",
+                "cwd": "${workspaceFolder}",
+                "MIMode": "gdb",
+                "miDebuggerPath": "arm-none-eabi-gdb.exe",
+                "miDebuggerServerAddress": "localhost:1234",
+                "serverLaunchTimeout": 5000, // Aumentado para 5 segundos
+                "stopAtEntry": true,
+                "preLaunchTask": "Debug Program"
+            }
       ]
-    }
-  ]
-}
+  }

@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build",
+            "type": "shell",
+			"command": "make",
+            "args": ["all"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"]
+        },
+
+		{
+            "label": "Debug Program",
+            "type": "shell",
+			"dependsOn": ["Build"],
+            "command": "qemu-system-arm",
+			"args": [
+                "-M", "vexpress-a9",
+                "-m", "512M",
+                "-kernel", "kernel.elf",
+                "-serial", "stdio",
+				"-monitor", "vc",
+				"-drive", "file=disk.img,if=sd,format=raw",
+				"-nographic",
+				"-S", 
+				"-gdb", "tcp::1234",
+            ],
+			"isBackground": true,
+			"problemMatcher": [], 
+    		"presentation": {
+        	"echo": false,
+        	"reveal": "silent",
+        	"panel": "shared"
+    		}
+        }
+    ]
+}

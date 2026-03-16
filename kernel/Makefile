@@ -11,9 +11,12 @@ CFLAGS = -mcpu=cortex-a9 -mfloat-abi=softfp -mfpu=neon-fp16 \
 			# -Wl, --no-warn-rwx-segments
 ASFLAGS =  -march=armv7-a -mcpu=cortex-a9 -mfpu=neon-fp16 -mfloat-abi=softfp --gdwarf2
 
-# Localizar fontes (Kernel e subpastas)
-SRCS_C = $(shell find -name "*.c")
-SRCS_S = $(shell find -name "*.s")
+# Função para busca recursiva
+rwildcard=$(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$(d),$(2)) $(filter $(subst *,%,$(2)),$(d)))
+
+# Uso: busca todos os .c e .s a partir da pasta atual
+SRCS_C = $(call rwildcard, ., *.c)
+SRCS_S = $(call rwildcard, ., *.s)
 
 # Mapear fontes para objetos dentro da pasta build/
 # Exemplo: kernel/main.c -> build/main.o

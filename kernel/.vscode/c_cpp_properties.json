@@ -1,35 +1,18 @@
 {
     "configurations": [
         {
-            "name": "windows-gcc-x64",
+            "name": "ARM-BareMetal",
             "includePath": [
-                "${workspaceFolder}/**"
-            ],
-            "compilerPath": "gcc",
-            "cStandard": "${default}",
-            "cppStandard": "${default}",
-            "intelliSenseMode": "windows-gcc-x64",
-            "compilerArgs": [
-                ""
-            ]
-        },
-        {
-            "name": "Arm-GCC",
-            "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "C:/Users/G7UD/Documents/Programacao/gcc-arm-none-eabi-10.3-2021.10/lib/gcc/arm-none-eabi/10.3.1/include" // CAMINHO DAS LIBS DO ARM GCC
             ],
             "defines": [
-                "_DEBUG",
-                "UNICODE",
-                "_UNICODE"
+                "__arm__",
+                "CORTEX_A9"
             ],
-            "compilerPath": "arm-none-eabi-gcc",
-            "compilerArgs": [
-                "-mcpu=cortex-a9 ",
-                "-mfloat-abi=softfp ",
-                "-mfpu=neon-fp16 \\",
-                "-ffreestanding -g -O0 -I. "
-            ]
+            "compilerPath": "C:/Users/G7UD/Documents/Programacao/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gcc.exe",
+            "cStandard": "c11",
+            "intelliSenseMode": "windows-gcc-arm"
         }
     ],
     "version": 4
