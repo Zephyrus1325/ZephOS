@@ -24,7 +24,7 @@ typedef enum {
     TASK_TERMINATED
 } task_state_t;
 
-typedef struct {
+typedef struct tcb_t{
     uint32_t id;
     uint32_t sp;
     task_state_t state;    // Estado da tarefa

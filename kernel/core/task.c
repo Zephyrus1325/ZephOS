@@ -16,7 +16,7 @@
 void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* stack_mem, uint32_t stack_size) {
     // Aponta para o fim da stack
     tcb->stack_base = stack_mem;
-    uint32_t *s = (uint32_t *)&tcb->stack_base[stack_size];
+    uint32_t* s = (uint32_t *)&tcb->stack_base[stack_size];
 
     // Ordem inversa dos POPs do Assembly:
     *(--s) = (uint32_t)task_func; // PC (carregado pelo pop {pc}^)
@@ -53,7 +53,6 @@ void scheduler(void) {
     // Note que usamos um int local para a busca para não estragar o índice global prematuramente
     static int current_idx = 0;
     int search_idx = current_idx;
-    
     // Tentamos encontrar uma tarefa READY no máximo 'task_count' vezes
     for (int i = 0; i < task_count; i++) {
         // Incrementa e rotaciona (sem usar %)

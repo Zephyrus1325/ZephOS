@@ -16,49 +16,52 @@ extern void start_first_task(void);
 extern void k_uart_printf_no_interrupt(const char *fmt, ...);
 extern void k_uart_print_no_interrupt(char* s);
 
-void task1(void) {
+extern int getpid(void);
+
+void task1(void){
     char buffer[64];
     FILE *fp;
     int count = 0;
 
     printf("--- Iniciando Task1 (User Mode) ---\n\r");
-    printf("--- Iniciando Task1 (User Mode) ---\n\r");
-    printf("--- Iniciando Task1 (User Mode) ---\n\r");
+    //printf("--- Iniciando Task1 (User Mode) ---\n\r");
+    //printf("--- Iniciando Task1 (User Mode) ---\n\r");
     // 1. Tentar abrir um arquivo no SD Card
-    fp = fopen("TEST.TXT", "r");
+    //fp = fopen("TEST.TXT", "r");
     
-    if (fp == NULL) {
-        printf("Erro: Nao foi possivel abrir TEST.TXT\n\r");
-        // Se falhar, entra em loop de erro
-        while(1) { msleep(1000); }
-    }
+    //if (fp == NULL) {
+    //    printf("Erro: Nao foi possivel abrir TEST.TXT\n\r");
+    //    // Se falhar, entra em loop de erro
+    //    while(1) { msleep(1000);}
+    //}
 
-    printf("Arquivo aberto com sucesso! Lendo conteudo...\n\r");
+    //printf("Arquivo aberto com sucesso! Lendo conteudo...\n\r");
 
     // 2. Ler e imprimir o conteúdo linha por linha ou bloco
     // Usando o fread padrão: ptr, size, nmemb, stream
-    while (fread(buffer, 1, 63, fp) > 0) {
-        buffer[63] = '\0'; // Garante o null-terminator para o printf
-        printf("Conteudo: %s\n", buffer);
-        
-        count++;
-        if(count > 10) break; // Segurança contra loop infinito
-    }
+    //while (fread(buffer, 1, 63, fp) > 0) {
+    //    buffer[63] = '\0'; // Garante o null-terminator para o printf
+    //    printf("Conteudo: %s\n", buffer);
+    //    
+    //    count++;
+    //    if(count > 10) break; // Segurança contra loop infinito
+    //}
 
     // 3. Fechar o arquivo
-    fclose(fp);
-    printf("Arquivo fechado. Task1 finalizada.\n\r");
+    //fclose(fp);
+    //printf("Arquivo fechado. Task1 finalizada.\n\r");
 
     // 4. Loop de idle da tarefa
+    printf("Task1 rodando... PID: %d\n", getpid());
     while (1) {
-        printf("Task1 rodando... PID: %d\n", getpid());
+        
         msleep(2000); // Dorme por 2 segundos
     }
 }
 
 void task2(){
     while(1){
-        msleep(10009);
+        msleep(10000);
     }
 }
 

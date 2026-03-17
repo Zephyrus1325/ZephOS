@@ -1,4 +1,5 @@
 // user_lib.c ou unistd.c
+#include "stdint.h"
 #include "include/syscall.h"
 #include "drivers/uart.h"
 
@@ -26,8 +27,11 @@ size_t fread(void* ptr, size_t size, size_t nmemb, FILE* stream) {
 int printf(const char* format, ...) {
     va_list args;
     va_start(args, format);
+    
+    uint32_t args_ptr = (uint32_t)&args;
 
-    int return_val = _syscall(SYS_PRINTF, (uint32_t)format, (uint32_t)&args, 0);
+    int return_val = _syscall(SYS_PRINTF, (uint32_t)format, args_ptr, 0);
+    
     va_end(args);
     return return_val;
 }
