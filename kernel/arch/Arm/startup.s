@@ -49,47 +49,19 @@ zero_loop:
     BL main                      // Rodar a Main em C
     B .                          // Caso a Main retorne, trava em loop infinito
 
+    
+.global svc_handler
 svc_handler:
-    cpsid i                 @ 1. Protege a seção crítica
-    
-    push {lr}               @ 2. Salva LR_svc (retorno para a tarefa)
-    mrs r12, SPSR           @ 3. Usa R12 para pegar o SPSR
-    push {r12}              @ 4. Salva SPSR na pilha
-    
-    @ Salva r0-r12 e LR_usr
-    push {r0-r12}           @ 5. Salva contexto de regs (R12 aqui é lixo, mas mantém alinhamento)
-    push {lr}               @ 6. Salva LR do modo usuário (importante para debug)
+    cpsid i			// desativa interrupções
+    push {r0-r12}   // salva estado dos registradores do usuario
+    push {lr}       // salva retorno do handler
 
-    @ 7. Gerencia Stack Pointer no TCB
-    ldr r4, =current_task
-    ldr r5, [r4]
-    str sp, [r5, #4]        @ Salva SP atual no TCB
+	bl k_svc_dispatcher		// Chama código C
 
-    @ 8. Prepara argumentos para o C (Dispatcher)
-    @ SP+0 = LR_usr, SP+4 = R0, SP+8 = R1, SP+12 = R2, SP+16 = R3
-    ldr r0, [sp, #4]        @ ID
-    ldr r1, [sp, #8]        @ Arg1
-    ldr r2, [sp, #12]       @ Arg2
-    ldr r3, [sp, #16]       @ Arg3
-    bl k_svc_dispatcher
-
-    @ 9. Recupera SP do TCB (pode ter havido troca de tarefa)
-    ldr r4, =current_task
-    ldr r5, [r4]
-    ldr sp, [r5, #4]
-
-    @ 10. SALVA RETORNO (R0) NO LUGAR DO R0 DA TAREFA NA PILHA
-    @ Como o topo da pilha é LR_usr (4 bytes), o R0 está em SP + 4
-    str r0, [sp, #4]
-
-    @ 11. Restaura tudo na ordem inversa
-    pop {lr}                @ Restaura LR_usr
-    pop {r0-r12}            @ Restaura r0-r12
-    pop {r1}                @ Pega o SPSR salvo lá no início
-    msr SPSR_cxsf, r1       @ Restaura SPSR
-    
-    cpsie i                 @ Reativa interrupções
-    ldmfd sp!, {pc}^        @ Retorno atômico (PC = LR e CPSR = SPSR)
+	pop {r0-r12}
+	pop {lr}
+    cpsie i			// reativa interrupções
+	movs PC, LR		// RETORNA E COLOCA O SPSR NO CPSR
 
 irq_handler:
     /* 1. Ajuste do LR para retorno de IRQ */

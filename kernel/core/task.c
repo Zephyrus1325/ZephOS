@@ -46,6 +46,19 @@ uint32_t task_count = 0;
 
 /*
     Scheduler chamado pelo assembly durante o SVC
+    FLOWCHART DO COISO
+
+CPU NO SVC:
+	- ALTERA MODO PRA SVC
+	- CPSR (USER) É COPIADO PARA SPSR
+	- ENDEREÇO DE RETORNO PÓS SVC É GUARDADO NO LR
+	
+	
+
+RETORNO:
+	MOVS PC, LR		// RETORNA E COLOCA O SPSR NO CPSR
+(ID R7 / PARAM R0, R1, R2, R3)
+
 */
 void scheduler(void) {
     
