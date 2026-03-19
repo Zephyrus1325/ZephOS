@@ -9,7 +9,7 @@
 
 // O contexto de uma tarefa ARMv7 (registradores principais)
 typedef struct {
-    uint32_t r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12;
+    uint32_t r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12;     // Registradores de uso geral
     uint32_t sp;   // Stack Pointer
     uint32_t lr;   // Link Register
     uint32_t pc;   // Program Counter (onde a tarefa parou)
@@ -24,12 +24,12 @@ typedef enum {
     TASK_TERMINATED
 } task_state_t;
 
+// task control block (Apenas no kernel sabe dele)
 typedef struct tcb_t{
-    uint32_t id;
-    uint32_t sp;
-    task_state_t state;    // Estado da tarefa
-    uint32_t sleep_ticks;  // Quantos ticks faltam
-    uint32_t* stack_base;
+    uint32_t id;            // Task ID, ou Process ID
+    task_state_t state;     // Estado da tarefa
+    uint32_t sleep_ticks;   // Quantos ticks faltam
+    uint32_t* stack_base;   // Endereço Base da Task
 } tcb_t;
 
 extern tcb_t task_table[MAX_TASKS];

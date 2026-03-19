@@ -58,12 +58,15 @@ void k_irq_handler(void) {
     @param pc Endereço do código que causou o erro
 */
 void k_panic_data_abort(uint32_t addr, uint32_t status, uint32_t pc) {
-    k_uart_printf("\n\r[KERNEL]: PANIC - DATA ABORT\n\r"
-        "\n\rAT INSTRUCTION: 0x%x\n\r"
-        "\n\rTRIED TO ACCESS: 0x%x\n\r"
-        "\n\rStatus (DFSR): 0x%x\n\r"
-        "\n\rSISTEM HALTED.\n\r"
-        , pc, addr, status);
+    k_uart_print("\n\r[KERNEL]: PANIC - DATA ABORT\n\n\r");
+    
+    k_uart_print("AT INSTRUCTION: 0x;");
+    k_uart_print_hex(pc);
+    k_uart_print("\n\rTRIED TO ACCESS: 0x");
+    k_uart_print_hex(addr);
+    k_uart_print("\n\rStatus (DFSR): 0x");
+    k_uart_print_hex(status);
+    k_uart_print("\n\rSISTEM HALTED.\n\r");
     while(1); // Trava o sistema para debug
 }
 

@@ -23,7 +23,8 @@ int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg
 
         case SYS_PRINTF:
             // arg1: fmt, arg2: va_list pointer
-            k_vprintf_internal(k_uart_putc, (const char*)arg1, *(va_list*)arg2);
+            //k_vprintf_internal(k_uart_putc, (const char*)arg1, *(va_list*)arg2);
+            k_uart_print_no_interrupt((char*)arg1);
             return 0;
 
         case SYS_GETPID:

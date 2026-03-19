@@ -18,6 +18,11 @@ extern void k_uart_print_no_interrupt(char* s);
 
 extern int getpid(void);
 
+void testthis(){
+    //k_uart_print("MIUAU\n\r");
+}
+
+
 void task1(void){
     char buffer[64];
     FILE *fp;
@@ -52,7 +57,7 @@ void task1(void){
     //printf("Arquivo fechado. Task1 finalizada.\n\r");
 
     // 4. Loop de idle da tarefa
-    printf("Task1 rodando... PID: %d\n", getpid());
+    //printf("Task1 rodando... PID: %d\n", getpid());
     while (1) {
         
         msleep(2000); // Dorme por 2 segundos
