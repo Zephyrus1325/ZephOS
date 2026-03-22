@@ -4,6 +4,14 @@
 #include "core/memory.h"
 #include "drivers/uart.h"
 
+// Variáveis de tarefas
+
+tcb_t* current_task = 0;
+tcb_t idle_task_tcb;
+
+tcb_t task_table[MAX_TASKS];
+uint32_t task_count = 0;
+
 /*
     Configura e inicia uma nova tarefa no sistema
 
@@ -14,36 +22,32 @@
 
 */
 void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* stack_mem, uint32_t stack_size) {
-    // Aponta para o fim da stack
-    tcb->stack_base = stack_mem;
-    uint32_t* s = (uint32_t *)&tcb->stack_base[stack_size];
+    // Preenche o TCB com os valores iniciais da tarefa
+    tcb->context.r0  = 0;
+    tcb->context.r1  = 1;
+    tcb->context.r2  = 2;
+    tcb->context.r3  = 3;
+    tcb->context.r4  = 4;
+    tcb->context.r5  = 5;
+    tcb->context.r6  = 6;
+    tcb->context.r7  = 7;
+    tcb->context.r8  = 8;
+    tcb->context.r9  = 9;
+    tcb->context.r9  = 10;
+    tcb->context.r10 = 11;
+    tcb->context.r11 = 12;
+    tcb->context.r12 = 13;
+    tcb->context.sp  = (uint32_t)&stack_mem[stack_size];    // Aponta para o final do Stack
+    tcb->context.lr  = 69;                                  // Retorno em Zero
+    tcb->context.cpsr = 0x10;                               // Modo Usuário
+    tcb->context.pc  = (uint32_t) task_func;                           // PC inicia no "main" da task usuária
 
-    // Ordem inversa dos POPs do Assembly:
-    *(--s) = (uint32_t)task_func; // PC (carregado pelo pop {pc}^)
-    *(--s) = (uint32_t)0x10;                // SPSR (carregado pelo pop {r1}) [NOTA: COLOCA AS TAREFAS NO MODO SUPERVISOR, COLOCAR 0x10 PARA USER MODE]
-    
-    // R12, R11, ..., R0 (carregados pelo pop {r0-r11, r12})
-    for (int i = 0; i < 13; i++) {
-        *(--s) = 0; 
-    }
-    
-    *(--s) = 0;                   // LR (carregado pelo pop {lr})
-
-    tcb->sp = (uint32_t)s;
     tcb->id = id;
+    tcb->stack_base = stack_mem;
     tcb->state = TASK_READY;
-    tcb->sleep_ticks = 0;
 }
 
 // Controle das tasks (scheduler)
-
-tcb_t* current_task = 0;
-tcb_t idle_task_tcb;
-
-tcb_t task_table[MAX_TASKS];
-uint32_t task_count = 0;
-
-
 /*
     Scheduler chamado pelo assembly durante o SVC
     FLOWCHART DO COISO

@@ -1,4 +1,5 @@
 .section .text
+.global _irq_handler
 
 _irq_handler:
     /* 1. Ajuste do LR para retorno de IRQ */

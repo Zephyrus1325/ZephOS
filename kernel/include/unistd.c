@@ -25,14 +25,14 @@ size_t fread(void* ptr, size_t size, size_t nmemb, FILE* stream) {
 }
 
 int printf(const char* format, ...) {
-    //va_list args;
-    //va_start(args, format);
-    
-    //uint32_t args_ptr = (uint32_t)&args;
+    va_list args;
+    va_start(args, format);
+
+    uint32_t args_ptr = (uint32_t)&args;
 
     int return_val = _syscall(SYS_PRINTF, (uint32_t)format, 0, 0);
     
-    //va_end(args);
+    va_end(args);
     return return_val;
 }
 

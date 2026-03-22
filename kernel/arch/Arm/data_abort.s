@@ -1,4 +1,6 @@
 .section .text
+.global _data_abort_handler
+.global _handler_undef
 
 _data_abort_handler:
 _handler_undef:

@@ -1,13 +1,12 @@
+.section .text
+//.include "arch/Arm/data_abort.s"
+//.include "arch/Arm/irq.s"
+//.include "arch/Arm/svc.s"
+//.include "arch/Arm/task_asm.s"
+
 .section .vectors, "ax"
 .global _vectors
 .global _start
-
-.include "arch/Arm/data_abort.s"
-.include "arch/Arm/irq.s"
-.include "arch/Arm/svc.s"
-.include "arch/Arm/task_asm.s"
-
-.global start_first_task
 
 _vectors:
     B _start                 // 0x00: Reset (Ponto de entrada)
