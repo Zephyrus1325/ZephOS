@@ -1,8 +1,8 @@
 .section .text
 
 /*
-    - LOGICA DO HANDLER 2.0:
-        
+- LOGICA DO HANDLER 2.0:
+       
     - USER CHAMA SVC
     - CPU MUDA DE ESTADO
     - CPSR -> SPSR
@@ -11,100 +11,67 @@
     - ENTRA NO HANDLER
         - DESATIVA INTERRUPTS
         - SALVA R0-R3 + R7 NO STACK DO SUPERVISOR
+        - SALVA LR DO SUPERVISOR
         - SALVA R0-R12 NO STACK DO USER
-        - SALVA SP, LR, PC NO STACK DO USER
+        - SALVA LR, PC NO STACK DO USER
         - CARREGA O SPSR E SALVA NO STACK DO USER
         - CARREGA R0-R3 + R7 DO STACK DO SUPERVISOR
-        
-
+        - CHAMA O K_SVC_HANDLER
+        - RETORNA
+        - CARREGA LR, PC DO STACK DO USER
+        - CARREGA R0-12 DO USER
+        - RETORNA DA FUNÇÃO 
  */
 
 
 
 _svc_handler:
     cpsid i
-    push {lr}           /* Salva PC de retorno */
-    mrs r12, spsr
-    push {r12}          /* Salva SPSR (CPSR da tarefa) */
-    push {r0-r11, r12}  /* Salva registradores */
-    push {lr}           /* Salva LR original da tarefa */
-    ldr r4, =current_task
-    ldr r5, [r4]
-    str sp, [r5, #4]
+    /* 1. Ajuste do LR para retorno de IRQ */
+    sub lr, lr, #4
+
+    /* 2. Salva temporários para poder mudar de modo */
+    push {r0-r3}        // Armazena os parâmetros recebidos para o SVC no stack
+    mov r0, lr          // Move o PC original do usuário para r0
+    mrs r1, spsr        // Move o Status original do usuário para r1
+
+    cps #0x1F           // Entra no modo SYSTEM para acessar o stack do user
+
+    /* 4. Monta o Frame de Contexto (Igual ao SVC) */
+    push {r0}           // Salva o PC de retorno 
+    push {r1}           // Salva o SPSR (CPSR da tarefa) 
+
+    /* 5. Recupera r0-r3 originais que ficaram na pilha SVC */
+    cps #0x13           // Muda para SVC
+    pop {r0-r3}         // Pega os parâmetros de volta
+    push {r0-r3}        // Salva para usar eles daqui a pouco
+    cps #0x1F           // Volta para SYSTEM
+    
+    /* 6. Salva o restante dos registradores */
+    push {r0-r11, r12}
+    push {lr}           // Salva o LR que o usuário tinha antes (LR_usr)
+
+    /* 7. Salva o SP atual no TCB da tarefa que foi interrompida */
+    ldr r0, =current_task       //
+    ldr r1, [r0]                // current_task->sp = sp;
+    str sp, [r1, #4]            //
+
+    cps #0x13                   // Volta para o Supervisor Mode
+    pop {r0-r3}                 // Pega de volta os parâmetros
+
+    /* 8. Chama o tratamento em C */
     bl k_svc_dispatcher
-    ldr r4, =current_task
-    ldr r5, [r4]
-    ldr sp, [r5, #4]
+
+    cps #0x1F                   // Entra no SYSTEM Mode
+    /* 9. Carrega o SP da nova tarefa (pode ser a Idle ou outra) */
+    ldr r0, =current_task
+    ldr r1, [r0]
+    ldr sp, [r1, #4]
+
+    /* 10. Restaura o Contexto (Simétrico) */
     pop {lr}
     pop {r0-r11, r12}
-    pop {r1}
+    pop {r1}            /* r1 = SPSR */
     msr spsr_cxsf, r1
     cpsie i
-    ldmfd sp!, {pc}^
-//_svc_handler:
-//    /* 1. O LR no SVC já aponta para a instrução correta. NÃO subtraia 4. */
-//	cpsid i
-//    /* 2. Salva o PC de retorno e o SPSR da tarefa */
-//    /* Como já estamos no modo SVC, usamos a própria pilha do Kernel/Tarefa */
-//    mov r12, lr         /* r12 = PC de retorno */
-//    mrs r11, spsr       /* r11 = CPSR da tarefa */
-//
-//    /* 3. Começa a montar a struct context_t na pilha */
-//    push {r11}          /* context->cpsr */
-//    push {r12}          /* context->pc */
-//
-//    /* 4. Captura o LR do usuário (R14_usr) */
-//    /* O modo SVC não enxerga o LR_usr diretamente. Usamos o modo System. */
-//    cps #0x1F           /* Muda para modo System (0x1F) */
-//    mov r12, lr         /* Pega o LR real do usuário */
-//    cps #0x13           /* Volta para modo SVC */
-//    push {r12}          /* context->lr */
-//
-//    /* 5. Salva o SP do usuário (R13_usr) */
-//    cps #0x1F
-//    mov r12, sp
-//    cps #0x13
-//    push {r12}          /* context->sp */
-//
-//    /* 6. Salva o restante dos registradores (R12 até R0) */
-//    /* Note que R0-R3 originais ainda estão intactos nos registradores */
-//    push {r0-r12}
-//
-//    /* 7. Salva o SP atual no TCB */
-//    ldr r0, =current_task
-//    ldr r1, [r0]
-//    str sp, [r1, #4]    /* tcb->sp = sp atual */
-//
-//    /* 8. Chama o Dispatcher em C */
-//    /* r0 = ID da syscall, r1-r3 = argumentos */
-//    bl k_svc_dispatcher
-//
-//    /* 9. Recupera o SP (pode ter havido troca de contexto/tarefa) */
-//    ldr r0, =current_task
-//    ldr r1, [r0]
-//    ldr sp, [r1, #4]
-//
-//    /* 10. Restaura o Contexto (Inverso da struct) */
-//    /* Atualiza o R0 na pilha com o retorno do dispatcher */
-//    str r0, [sp, #0]
-//
-//    pop {r0-r12}        /* Restaura R0-R12 */
-//    
-//    pop {r12}           /* Restaura SP_usr */
-//    cps #0x1F
-//    mov sp, r12
-//    cps #0x13
-//
-//    pop {r12}           /* Restaura LR_usr */
-//    cps #0x1F
-//    mov lr, r12
-//    cps #0x13
-//
-//    pop {r1}            /* r1 = PC de retorno */
-//    pop {r2}            /* r2 = SPSR */
-//    msr spsr_cxsf, r2
-//    
-//    mov lr, r1          /* Prepara o LR_svc para o retorno */
-//	  cpsie i
-//    ldmfd sp!, {pc}^    /* Retorno atômico */
-//
+    ldmfd sp!, {pc}^           /* Restaura PC e CPSR simultaneamente */
