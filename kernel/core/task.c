@@ -12,6 +12,12 @@ tcb_t idle_task_tcb;
 tcb_t task_table[MAX_TASKS];
 uint32_t task_count = 0;
 
+static uint32_t __stack_svc_top;
+static uint32_t __stack_irq_top;
+
+volatile uint32_t _sp_svc = (uint32_t)&__stack_svc_top;
+volatile uint32_t _sp_irq = (uint32_t)&__stack_irq_top;
+
 /*
     Configura e inicia uma nova tarefa no sistema
 
@@ -33,10 +39,9 @@ void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* sta
     tcb->context.r7  = 7;
     tcb->context.r8  = 8;
     tcb->context.r9  = 9;
-    tcb->context.r9  = 10;
-    tcb->context.r10 = 11;
-    tcb->context.r11 = 12;
-    tcb->context.r12 = 13;
+    tcb->context.r10 = 10;
+    tcb->context.r11 = 11;
+    tcb->context.r12 = 12;
     tcb->context.sp  = (uint32_t)&stack_mem[stack_size];    // Aponta para o final do Stack
     tcb->context.lr  = 69;                                  // Retorno em Zero
     tcb->context.cpsr = 0x10;                               // Modo Usuário

@@ -2,46 +2,42 @@
 .global _irq_handler
 
 _irq_handler:
-    /* 1. Ajuste do LR para retorno de IRQ */
-    sub lr, lr, #4
-
-    /* 2. Salva temporários para poder mudar de modo */
-    push {r0-r3}
-    mov r0, lr          /* r0 agora guarda o PC de retorno da tarefa */
-    mrs r1, spsr        /* r1 agora guarda o CPSR da tarefa */
-
-    /* 3. Muda para modo SVC para salvar na pilha da tarefa */
-    cps #0x13
-
-    /* 4. Monta o Frame de Contexto (Igual ao SVC) */
-    push {r0}           /* Salva o PC de retorno */
-    push {r1}           /* Salva o SPSR (CPSR da tarefa) */
+    cpsid i                 // Desativa interrupções
     
-    /* 5. Recupera r0-r3 originais que ficaram na pilha IRQ */
-    cps #0x12
-    pop {r0-r3}
-    cps #0x13
+    ldr r12, =current_task
+    ldr sp, [r12]               // task sp = *current_task (current_task é um *tcb_t)
+    add sp, sp, #64             // Vai para o final do context
+    stmda sp!, {lr}             // Salva o pc da tarefa
     
-    /* 6. Salva o restante dos registradores */
-    push {r0-r11, r12}
-    push {lr}           /* Salva o LR original da tarefa (R14_usr) */
+    stmda sp!, {r0-r12}         // Salva todos os registradores do usuario
 
-    /* 7. Salva o SP atual no TCB da tarefa que foi interrompida */
-    ldr r0, =current_task
-    ldr r1, [r0]
-    str sp, [r1, #4]
+    mrs r12, SPSR               // Carrega o SPSR_user
+    stmda sp!, {r12}            // Salva o SPSR_user
+    cps #0x1F                   // Entra no System Mode
+    mov r11, sp
+    mov r12, lr              
+    cps #0x12                   // Volta para o modo IRQ
+    stmda sp!, {r11, r12}       // Guarda os sp e lr de volta
 
-    /* 8. Chama o tratamento em C (Tick + Scheduler) */
-    bl k_irq_handler
+    ldr r11, =_sp_irq
+    ldr sp, [r11]               // Carrega o SP do kernel
 
-    /* 9. Carrega o SP da nova tarefa (pode ser a Idle ou outra) */
-    ldr r0, =current_task
-    ldr r1, [r0]
-    ldr sp, [r1, #4]
+    bl k_irq_handler         
 
-    /* 10. Restaura o Contexto (Simétrico) */
-    pop {lr}
-    pop {r0-r11, r12}
-    pop {r1}            /* r1 = SPSR */
-    msr spsr_cxsf, r1
-    ldmfd sp!, {pc}^           /* Restaura PC e CPSR simultaneamente */
+    ldr r1, =current_task   //
+    ldr r0, [r1]            // task r0 = *current_task (current_task é um *tcb_t)
+
+    
+    ldmfd r0, {sp, lr}^     // Carrega e guarda o SP_user e LR_user
+    add r0, r0, #8          // Bleh
+    ldmfd r0!, {r1}         // Carrega o SPSR_user
+    msr SPSR_cxsf, r1       // Guarda o SPSR_user
+
+    ldr r1, =_sp_irq  
+    str sp, [r1]            // Armazena o valor do SP do kernel para uso futuro
+    mov sp, r0              // Coloca o endereço da task no SP
+
+    ldmfd sp!, {r0-r12}     // Carrega os registradores r0-r12 (13 registradores)
+
+
+    ldmfd sp!, {pc}^            // Retorna para a task que chamou, ou para a task que AAAAA

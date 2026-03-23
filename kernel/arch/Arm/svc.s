@@ -26,43 +26,50 @@
 
 
 .global _svc_handler
+
+/*
+
+
+
+
+ */
 _svc_handler:
-    cpsid i                     @ 1. Protege seção crítica
+    cpsid i                 // Desativa interrupções
     
-    @ --- FASE 1: SALVAR O CONTEXTO NA PILHA DA TAREFA ---
-    @ O hardware já salvou o PC no LR e o CPSR no SPSR
-    push {lr}                   @ context->pc   // retorno para o user mode
-    mrs r12, SPSR
-    push {r12}                  @ context->cpsr // modo do user
-
-    @ Salva LR e SP do usuário (sem mudar de modo)
-    stmfd sp!, {lr}^         @ context->sp e context->lr
-
-    @ Salva R12 até R0
-    sub sp, sp, #52
-    stmia sp, {r0-r12}^         @ context->r0 até context->r12
-
-    @ --- FASE 2: ATUALIZAR TCB E CHAMAR DISPATCHER ---
-    ldr r4, =current_task       
-    ldr r5, [r4]
-    str sp, [r5, #4]            @ tcb->sp = sp atual
-
-    @ r0-r3 já estão com os argumentos da syscall
-    bl k_svc_dispatcher
-
-    ldr r0, =current_task
-    ldr r1, [r0]
-    ldr r2, [r1, #4]        // Carrega o SP do TCB
-    mov sp, r2              // Carrega o SP para o SP_svc
-
-    cps 0x1F                // Entra no System Mode
-    mov sp, r2              // Altera o valor de SP_user
-    cps 0x13                // Retorna ao modo Supervisor
-
-    pop {lr}                @ 1. Tira o LR_usr (0)
-    pop {r0-r12}            @ 2. Tira r0 até r12 (13 registradores)
-    pop {r1}                @ 3. Tira o SPSR (0x10)
+    ldr r12, =current_task
+    ldr sp, [r12]               // task sp = *current_task (current_task é um *tcb_t)
+    add sp, sp, #64             // Vai para o final do context
+    stmda sp!, {lr}             // Salva o pc da tarefa
     
-    msr SPSR_cxsf, r1       @ 4. Prepara o SPSR com 0x10
+    stmda sp!, {r0-r12}         // Salva todos os registradores do usuario
 
-    ldmfd sp!, {pc}^        @ 5. Volta para User Mode e pula para task_func
+    mrs r12, SPSR          // Carrega o SPSR_user
+    stmda sp!, {r12}            // Salva o SPSR_user
+    cps #0x1F                   // Entra no System Mode
+    mov r11, sp
+    mov r12, lr              
+    cps #0x13                   // Volta para o modo SVC
+    stmda sp!, {r11, r12}       // Guarda os sp e lr de volta
+
+    ldr r11, =_sp_svc
+    ldr sp, [r11]               // Carrega o SP do kernel
+
+    bl k_svc_dispatcher         
+
+    ldr r1, =current_task   //
+    ldr r0, [r1]            // task r0 = *current_task (current_task é um *tcb_t)
+
+    
+    ldmfd r0, {sp, lr}^     // Carrega e guarda o SP_user e LR_user
+    add r0, r0, #8          // Bleh
+    ldmfd r0!, {r1}         // Carrega o SPSR_user
+    msr SPSR_cxsf, r1       // Guarda o SPSR_user
+
+    ldr r1, =_sp_svc  
+    str sp, [r1]            // Armazena o valor do SP do kernel para uso futuro
+    mov sp, r0              // Coloca o endereço da task no SP
+
+    ldmfd sp!, {r0-r12}     // Carrega os registradores r0-r12 (13 registradores)
+
+
+    ldmfd sp!, {pc}^            // Retorna para a task que chamou, ou para a task que AAAAA
