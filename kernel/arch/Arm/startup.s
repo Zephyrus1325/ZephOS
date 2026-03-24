@@ -28,6 +28,10 @@ _start:
     MCR p15, 0, r0, c12, c0, 0   // Escreve no VBAR (Vector Base Address)
 
     /* Configurar pilha para modo Supervisor (Kernel) */
+    MSR cpsr_c, #0xD7            // Entra no modo ABT
+    LDR sp, =__stack_abt_top     // Define o topo da RAM para a pilha do abort
+
+    /* Configurar pilha para modo Supervisor (Kernel) */
     MSR cpsr_c, #0xD3            // Entra no modo SVC
     LDR sp, =__stack_svc_top     // Define o topo da RAM para a pilha do Kernel
 

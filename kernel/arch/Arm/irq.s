@@ -4,40 +4,39 @@
 _irq_handler:
     cpsid i                 // Desativa interrupções
     
-    ldr r12, =current_task
-    ldr sp, [r12]               // task sp = *current_task (current_task é um *tcb_t)
-    add sp, sp, #64             // Vai para o final do context
-    stmda sp!, {lr}             // Salva o pc da tarefa
+    push {r0}               // COloca R0 e R1 no stack IRQ
+    mov r0, lr              // Salva o PC do user
+    sub r0, r0, #4          // lr - 4
+    cps 0x1F                // Vai pra System mode
+    push {r0}               // Salva PC no stack do user
     
-    stmda sp!, {r0-r12}         // Salva todos os registradores do usuario
+    cps 0x12               // Volta pra IRQ
+    pop {r0}                // Pega r0 do stack IRQ
+    cps 0x1F                // Vai pra System mode de novo
+    push {r0-r12}            // Guarda isso tudo no stack do usuario
 
-    mrs r12, SPSR               // Carrega o SPSR_user
-    stmda sp!, {r12}            // Salva o SPSR_user
-    cps #0x1F                   // Entra no System Mode
-    mov r11, sp
-    mov r12, lr              
-    cps #0x12                   // Volta para o modo IRQ
-    stmda sp!, {r11, r12}       // Guarda os sp e lr de volta
+    mrs r11, SPSR
+    push {r11, lr}           // Salva CPSR do usuario e LR
 
-    ldr r11, =_sp_irq
-    ldr sp, [r11]               // Carrega o SP do kernel
-
-    bl k_irq_handler         
-
-    ldr r1, =current_task   //
-    ldr r0, [r1]            // task r0 = *current_task (current_task é um *tcb_t)
-
+    ldr r11, =current_task   // Carrega o TCB da task
+    ldr r12, [r11]
+    add r12, r12, #12         // Pega o endereço do stack_base
+    str sp, [r12]            // salva o valor atual do stack_user
     
-    ldmfd r0, {sp, lr}^     // Carrega e guarda o SP_user e LR_user
-    add r0, r0, #8          // Bleh
-    ldmfd r0!, {r1}         // Carrega o SPSR_user
-    msr SPSR_cxsf, r1       // Guarda o SPSR_user
+    cps 0x12               // Volta pra IRQ
 
-    ldr r1, =_sp_irq  
-    str sp, [r1]            // Armazena o valor do SP do kernel para uso futuro
-    mov sp, r0              // Coloca o endereço da task no SP
+    bl k_irq_handler        // Realiza a subrotina do IRQ
 
-    ldmfd sp!, {r0-r12}     // Carrega os registradores r0-r12 (13 registradores)
+    cps 0x1F                // Vai pra system mode
+    
+    ldr r0, =current_task
+    ldr r1, [r0]    
+    add r1, r1, #12         // Pega o endereço do stack_base
+    ldr sp, [r1]            // Carrega o stack novo
 
-
-    ldmfd sp!, {pc}^            // Retorna para a task que chamou, ou para a task que AAAAA
+    pop {r0, lr}            // Carrega o CPSR e LR
+    msr SPSR, r0            // Salva o CPSR novo
+    
+    pop {r0-r12}            // Carrega os registradores r0-r12 de volta
+    
+    ldmfd sp!, {pc}^        // Retorna para a task principal e coloca SPSR em CPSR

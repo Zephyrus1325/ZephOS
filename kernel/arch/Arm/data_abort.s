@@ -4,6 +4,7 @@
 
 _data_abort_handler:
 _handler_undef:
+    cpsid i
     // 1. Recuperar o endereço da instrução que falhou (LR - 8)
     SUB LR, LR, #8
     
@@ -17,3 +18,4 @@ _handler_undef:
     // O LR (instrução) vai como 3º argumento (R2)
     MOV R2, LR
     B k_panic_data_abort
+    b .

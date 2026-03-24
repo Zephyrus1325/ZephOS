@@ -11,9 +11,8 @@ extern void k_vprintf_internal(putc_func_t putc_func, const char *fmt, va_list a
 
 /* --- Despachante de Syscalls do Kernel --- */
 // Função Atômica (aka: não vão acontecer interrupções dentro dela)
-int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
+int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4) {
     switch (id) {
-        
         case SYS_PUTC:
             k_uart_putc((char)arg1);
             return 0;
@@ -78,15 +77,13 @@ int32_t k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg
             return 0;
 
         case SYS_EXIT:
-            k_uart_print("[Kernel] Task exited.\n\r");
+            k_uart_print_no_interrupt("[Kernel] Task exited.\n\r");
             current_task->state = TASK_TERMINATED;
             scheduler();
             return 0;
 
         default:
-            k_uart_print("[Kernel] Error: Unknown Syscall ID: ");
-            k_uart_print_hex(id);
-            k_uart_print("\n\r");
+            k_uart_printf_no_interrupt("[Kernel][TASK %d] Error: Unknown Syscall ID: %d\n\r", current_task->id, id);
             return -1;
     }
 }

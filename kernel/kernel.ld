@@ -71,6 +71,11 @@ SECTIONS
         __stack_svc_start = .;
         . = . + _stack_size_svc;
         __stack_svc_top = .;
+
+        /* Pilha do modo IRQ */
+        __stack_abt_start = .;
+        . = . + _stack_size_abt;
+        __stack_abt_top = .;
         
         . = ALIGN(8);
     } > RAM

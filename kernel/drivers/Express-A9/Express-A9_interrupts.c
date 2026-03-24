@@ -2,6 +2,7 @@
 #include "drivers/interrupts.h"
 #include "drivers/uart.h"
 #include <stdint.h>
+#include "core/task.h"
 
 void (*ISR_fn[256])(void);  // Array com os ISRs de cada ID de interrupção
 
@@ -57,16 +58,16 @@ void k_irq_handler(void) {
     @param status valor do status register no momento do erro
     @param pc Endereço do código que causou o erro
 */
+
+extern tcb_t* current_task;
 void k_panic_data_abort(uint32_t addr, uint32_t status, uint32_t pc) {
-    k_uart_print("\n\r[KERNEL]: PANIC - DATA ABORT\n\n\r");
-    
-    k_uart_print("AT INSTRUCTION: 0x;");
-    k_uart_print_hex(pc);
-    k_uart_print("\n\rTRIED TO ACCESS: 0x");
-    k_uart_print_hex(addr);
-    k_uart_print("\n\rStatus (DFSR): 0x");
-    k_uart_print_hex(status);
-    k_uart_print("\n\rSISTEM HALTED.\n\r");
+    k_uart_printf_no_interrupt("\n\r[KERNEL]: PANIC - DATA ABORT\n\r");
+    k_uart_printf_no_interrupt("\n\rTHE TASK: %d", (uint32_t)current_task->id);
+    k_uart_printf_no_interrupt("\n\rAT INSTRUCTION: 0x%x", (uint32_t)pc);
+    k_uart_printf_no_interrupt("\n\rTRIED TO ACCESS: 0x%x", (uint32_t)addr);
+    k_uart_printf_no_interrupt("\n\rStatus (CPSR): 0x%x", (uint32_t)status);
+
+    k_uart_printf_no_interrupt("\n\r--- SISTEM HALTED. ---\n\r");
     while(1); // Trava o sistema para debug
 }
 

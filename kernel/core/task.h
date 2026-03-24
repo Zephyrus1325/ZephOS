@@ -26,10 +26,10 @@ typedef enum {
 
 // task control block (Apenas no kernel sabe dele)
 typedef struct tcb_t{
-    context_t context;      // Estado dos registradores (deixar sempre no COMEÇO da struct)
     uint32_t id;            // Task ID, ou Process ID
     task_state_t state;     // Estado da tarefa
     uint32_t sleep_ticks;   // Quantos ticks faltam
+    uint32_t* sp;
     uint32_t* stack_base;   // Endereço Base da Task
 } tcb_t;
 

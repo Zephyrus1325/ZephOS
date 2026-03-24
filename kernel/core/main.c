@@ -59,14 +59,15 @@ void task1(void){
     // 4. Loop de idle da tarefa
     //printf("Task1 rodando... PID: %d\n", getpid());
     while (1) {
-        
-        msleep(2000); // Dorme por 2 segundos
+        printf("TESTE A\n\r");
+        msleep(1000); // Dorme por 2 segundos
     }
 }
 
 void task2(){
     while(1){
-        msleep(10000);
+        printf("TESTE B\n\r");
+        msleep(2000);
     }
 }
 

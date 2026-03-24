@@ -27,28 +27,34 @@ volatile uint32_t _sp_irq = (uint32_t)&__stack_irq_top;
     @param stack_size Total de palavras a ser alocados para o stack da tarefa
 
 */
-void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* stack_mem, uint32_t stack_size) {
-    // Preenche o TCB com os valores iniciais da tarefa
-    tcb->context.r0  = 0;
-    tcb->context.r1  = 1;
-    tcb->context.r2  = 2;
-    tcb->context.r3  = 3;
-    tcb->context.r4  = 4;
-    tcb->context.r5  = 5;
-    tcb->context.r6  = 6;
-    tcb->context.r7  = 7;
-    tcb->context.r8  = 8;
-    tcb->context.r9  = 9;
-    tcb->context.r10 = 10;
-    tcb->context.r11 = 11;
-    tcb->context.r12 = 12;
-    tcb->context.sp  = (uint32_t)&stack_mem[stack_size];    // Aponta para o final do Stack
-    tcb->context.lr  = 69;                                  // Retorno em Zero
-    tcb->context.cpsr = 0x10;                               // Modo Usuário
-    tcb->context.pc  = (uint32_t) task_func;                           // PC inicia no "main" da task usuária
+void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* stack_base, uint32_t stack_size) {
 
+    uint32_t* sp = (uint32_t)&stack_base[stack_size];        // Aponta para o final do stack
+    *(--sp) = (uint32_t) task_func;                          // Aponta para o PC da task desejada
+
+
+    // Preenche o TCB com os valores iniciais da tarefa
+    *(--sp) = 0x12;     // r12
+    *(--sp) = 0x11;     // r11
+    *(--sp) = 0x10;     // r10
+    *(--sp) = 0x09;     // r9
+    *(--sp) = 0x08;     // r8
+    *(--sp) = 0x07;     // r7
+    *(--sp) = 0x06;     // r6
+    *(--sp) = 0x05;     // r5
+    *(--sp) = 0x04;     // r4
+    *(--sp) = 0x03;     // r3
+    *(--sp) = 0x02;     // r2
+    *(--sp) = 0x01;     // r1
+    *(--sp) = 0x00;     // r0
+    
+    *(--sp) = 0x69;     // LR
+    *(--sp) = 0x10;     // CPSR - Modo usuário
+    
+    
+    tcb->sp = sp;
     tcb->id = id;
-    tcb->stack_base = stack_mem;
+    tcb->stack_base = stack_base;
     tcb->state = TASK_READY;
 }
 
