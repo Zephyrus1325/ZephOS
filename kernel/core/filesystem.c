@@ -134,6 +134,7 @@ FILE* k_fopen(const char* filename, const char* mode) {
     for (int i = 0; i < 16; i++) {
         if (entries[i].name[0] == 0x00) break;
         if (memcmp(entries[i].name, fat_name, 11) == 0) {
+            
             FILE* fp = (FILE*)k_malloc(sizeof(FILE));
             fp->size = entries[i].file_size;
             fp->first_cluster = (entries[i].cluster_high << 16) | entries[i].cluster_low;
@@ -187,7 +188,7 @@ size_t k_fread(void* ptr, size_t size, size_t nmemb, FILE* fp) {
         }
     }
 
-    return bytes_read / size;
+    return bytes_read;
 }
 
 int k_fgetc(FILE* fp) {

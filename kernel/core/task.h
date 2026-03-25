@@ -8,8 +8,7 @@
 #define MAX_TASKS 256   // Quantidade maxima de tasks
 
 // O contexto de uma tarefa ARMv7 (registradores principais)
-typedef struct {
-    uint32_t sp;   // Stack Pointer
+typedef struct context_t{
     uint32_t lr;   // Link Register
     uint32_t cpsr; // Status do processador
     uint32_t r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12;     // Registradores de uso geral

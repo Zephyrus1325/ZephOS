@@ -57,7 +57,7 @@ void k_vprintf_internal(putc_func_t putc_func, const char* fmt, va_list args) {
         k_uart_print("[KERNEL]: ERROR: INVALID FORMAT STRING\n\r"); 
         return;
     }
-    while ((c = *fmt++)) {
+    for(c = *fmt++; c != 0; c = *fmt++){
         if (c != '%') {
             putc_func(c);
             continue;

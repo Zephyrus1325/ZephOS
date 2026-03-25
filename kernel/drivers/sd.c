@@ -79,7 +79,7 @@ int k_sd_init(void) {
 
 int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
     
-    k_disable_interrupts(); // Seção Crítica Abaixo !!
+    //k_disable_interrupts(); // Seção Crítica Abaixo !!
 
     uint32_t *dest = (uint32_t *)buffer;
 
@@ -96,7 +96,7 @@ int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
 
     if (sd_send_cmd(CMD17, lba*512, 0x40) != 0) {
         k_uart_print("[FILESYSTEM]: SD COMMAND FAIL\n\r"); 
-        k_enable_interrupts(); 
+        //k_enable_interrupts(); 
         return -1;
     }
 
@@ -113,13 +113,13 @@ int k_sd_read_sector(uint32_t lba, uint8_t *buffer) {
         if (status & ((1 << 1) | (1 << 3))) return -1;
         safety_timeout--;
     }
-    k_enable_interrupts();
+    //k_enable_interrupts();
     return 0;
 }
 
 int k_sd_write_sector(uint32_t lba, uint8_t *buffer) {
     
-    k_disable_interrupts();
+    //k_disable_interrupts();
     uint32_t *src = (uint32_t *)buffer;
 
     // 1. Limpar status e configurar Data Path para ESCRITA
@@ -134,7 +134,7 @@ int k_sd_write_sector(uint32_t lba, uint8_t *buffer) {
     // 2. CMD24: Write Single Block
     if (sd_send_cmd(CMD24, lba * 512, 0x40) != 0) {
         k_uart_print("[FILESYSTEM]: SD COMMAND FAIL\n\r"); 
-        k_enable_interrupts(); 
+        //k_enable_interrupts(); 
         return -1;
     }
     
@@ -152,7 +152,10 @@ int k_sd_write_sector(uint32_t lba, uint8_t *buffer) {
         }
 
         // Checar erros (Timeout de escrita ou CRC)
-        if (status & ((1 << 1) | (1 << 3))) {k_enable_interrupts(); return -1;}
+        if (status & ((1 << 1) | (1 << 3))) {
+            //k_enable_interrupts(); 
+            return -1;
+        }
         
         safety_timeout--;
     }
@@ -161,6 +164,6 @@ int k_sd_write_sector(uint32_t lba, uint8_t *buffer) {
     while(!(*MMCI_STATUS & (1 << 8)) && safety_timeout > 0) {
         safety_timeout--;
     }
-    k_enable_interrupts();
+    //k_enable_interrupts();
     return (words_written == 128) ? 0 : -1;
 }

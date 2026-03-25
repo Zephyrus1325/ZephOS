@@ -28,9 +28,7 @@ int printf(const char* format, ...) {
     va_list args;
     va_start(args, format);
 
-    uint32_t args_ptr = (uint32_t)&args;
-
-    int return_val = _syscall(SYS_PRINTF, (uint32_t)format, 0, 0);
+    int return_val = _syscall(SYS_PRINTF, (uint32_t)format, (uint32_t)&args, 0);
     
     va_end(args);
     return return_val;

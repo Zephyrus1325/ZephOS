@@ -25,7 +25,7 @@ void* k_malloc(size_t size) {
     // 1. Alinhamento de 8 bytes
     size = (size + 7) & ~7;
 
-    k_disable_interrupts(); // Desabilitar interrupções para evitar race condition
+    //k_disable_interrupts(); // Desabilitar interrupções para evitar race condition
 
     block_header_t *curr = free_list;
 
@@ -47,13 +47,13 @@ void* k_malloc(size_t size) {
 
             curr->is_free = 0;
 
-            k_enable_interrupts();   // Reativa Interrupções
+            //k_enable_interrupts();   // Reativa Interrupções
             return (void *)((uint8_t *)curr + HEADER_SIZE);
         }
         curr = curr->next;
     }
 
-    k_enable_interrupts();  // Reativa Interrupções
+    //k_enable_interrupts();  // Reativa Interrupções
     return NULL; // Sem memória
 }
 
