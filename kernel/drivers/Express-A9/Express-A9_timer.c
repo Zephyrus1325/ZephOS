@@ -32,6 +32,7 @@
 #define TIMER_ONESHOT (1<<0)
 
 volatile uint64_t system_ticks = 0;
+volatile uint32_t system_millis = 0;
 extern void k_tick_handler(void);
 extern void scheduler(void);
 
@@ -43,6 +44,7 @@ void k_setup_timers(){
 void k_timer1_isr(void) {
     *SP804_TIMER1_INTCLR = 1; // Limpa interrupção no hardware do timer
     system_ticks++;
+    system_millis++;
     k_tick_handler();
     scheduler();
 }

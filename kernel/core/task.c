@@ -3,6 +3,7 @@
 #include "include/syscall.h"
 #include "core/memory.h"
 #include "drivers/uart.h"
+#include "drivers/timer.h"
 
 // Variáveis de tarefas
 
@@ -54,6 +55,7 @@ void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* sta
     
     tcb->sp = sp;
     tcb->id = id;
+    tcb->start_time = system_millis;
     tcb->stack_base = stack_base;
     tcb->state = TASK_READY;
 }

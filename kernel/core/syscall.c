@@ -5,6 +5,7 @@
 #include "core/memory.h"
 #include "drivers/uart.h"
 #include "drivers/interrupts.h"
+#include "drivers/timer.h"
 
 typedef void (*putc_func_t)(char);
 extern void k_vprintf_internal(putc_func_t putc_func, const char *fmt, va_list args);
@@ -40,6 +41,10 @@ void k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3, 
             current_task->sleep_ticks = arg1;
             current_task->state = TASK_SLEEPING;
             scheduler(); 
+            return;
+        
+        case SYS_MILLIS:
+            context->r0 = system_millis - current_task->start_time;
             return;
 
         case SYS_SPAWN:

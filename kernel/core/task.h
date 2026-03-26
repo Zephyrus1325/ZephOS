@@ -30,7 +30,13 @@ typedef struct tcb_t{
     uint32_t sleep_ticks;   // Quantos ticks faltam
     uint32_t* sp;
     uint32_t* stack_base;   // Endereço Base da Task
+    uint32_t start_time     // Instante que a tarefa começou execução (usado no millis() da tarefa)
 } tcb_t;
+
+typedef struct task_t {
+    void(*entry)(void);
+    size_t stack_size;
+}task_t;
 
 extern tcb_t task_table[MAX_TASKS];
 extern uint32_t task_count;

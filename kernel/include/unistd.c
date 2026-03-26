@@ -42,8 +42,16 @@ void msleep(uint32_t ms) {
     _syscall(SYS_SLEEP, ms, 0, 0);
 }
 
+uint32_t millis() {
+    return _syscall(SYS_MILLIS, 0, 0, 0);
+}
+
 int fclose(FILE* stream) {
     return _syscall(SYS_FCLOSE, (uint32_t)stream, 0, 0);
+}
+
+int32_t spawn(void (*func)(void), size_t stack_size){
+    return _syscall(SYS_SPAWN, (uint32_t)func, (uint32_t)stack_size, 0);
 }
 
 int getpid(void) {
