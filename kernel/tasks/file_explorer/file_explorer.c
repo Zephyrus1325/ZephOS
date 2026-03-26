@@ -1,10 +1,9 @@
 #include "file_explorer.h"
-
 #include "include/syscall.h"
 
 static void main(){
     while(1){
-        delay(100000);
+        msleep(100000);
     }
 }
 

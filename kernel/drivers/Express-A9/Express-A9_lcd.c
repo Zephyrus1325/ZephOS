@@ -7,9 +7,11 @@
 #define LCD_TIM1    ((volatile uint32_t *)(LCD_BASE + 0x04)) // Vertical timings
 #define LCD_UPBASE  ((volatile uint32_t *)(LCD_BASE + 0x10)) // Endereço do Framebuffer
 #define LCD_CTRL    ((volatile uint32_t *)(LCD_BASE + 0x18)) // Controle (ON/OFF/BPP)
+#define LCD_WIDTH 1024
+#define LCD_HEIGHT 768
 
 // Alinhamento de 16 bytes é importante para o DMA do PL111
-uint32_t framebuffer[1024 * 768] __attribute__((aligned(16)));
+uint32_t framebuffer[LCD_WIDTH * LCD_HEIGHT] __attribute__((aligned(4096)));
 
 void k_setup_lcd() {
     // 1. Configurar o endereço da RAM onde os pixels estão
@@ -22,12 +24,12 @@ void k_setup_lcd() {
 
     // 3. Ativar o LCD
     // Bit 0: EN (Enable), Bit 1-3: BPP (101 para 24bpp ou 110 para 32bpp), Bit 5: LcdTft
-    *LCD_CTRL = (1 << 0) | (5 << 1) | (1 << 5) | (1 << 11); 
+    *LCD_CTRL = (1 << 0) | (6 << 1) | (1 << 5) | (1 << 11); 
 }
 
 void put_pixel(int x, int y, uint32_t color) {
-    if (x >= 0 && x < 1024 && y >= 0 && y < 768) {
-        framebuffer[y * 1024 + x] = color;
+    if (x >= 0 && x < LCD_WIDTH && y >= 0 && y < LCD_HEIGHT) {
+        framebuffer[y * LCD_WIDTH + x] = color;
     }
 }
 
@@ -35,9 +37,9 @@ void put_pixel(int x, int y, uint32_t color) {
 #include "drivers/interrupts.h"
 
 void clear_screen(uint32_t color) {
-    k_enable_interrupts();
-    for (int i = 0; i < 1024 * 768; i++) { 
+    //k_enable_interrupts();
+    for (int i = 0; i < LCD_WIDTH * LCD_HEIGHT; i++) { 
         framebuffer[i] = color;
     }
-    k_disable_interrupts();
+    //k_disable_interrupts();
 }
