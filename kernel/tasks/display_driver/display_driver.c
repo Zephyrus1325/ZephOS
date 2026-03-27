@@ -2,6 +2,7 @@
 #include "include/syscall.h"
 
 #include "drivers/lcd.h"
+#include "text_render.h"
 
 /*
  *  Task Responsável por criar todo os gráficos básicos do sistema
@@ -10,10 +11,13 @@
 
 static void main(){
     
-    for(int y = 0; y < 200; y++){
-        for(int x = 0; x < 300; x++){
-            uint32_t color = (x % 50) < 25 ? 0 : 0xFFFFFFFF;//(((y * 0xff) / (240)) << 8) + (((x * 0xff) / 320));
-            //printf("X: %d | Y: %d | Color: 0x%x\n\r",x, y, color);
+    text_init();
+    clear_screen(0);
+    
+    uint32_t color = 0;
+    for(int y = 0; y < 480; y++){
+        for(int x = 0; x < 640; x++){
+            color = ((x * 255) / 640 << 16) + (((y * 255) / 480)); // y % 50 < 25 ? 0xFF : 0;//
             put_pixel(x, y, color);
         }
     }
