@@ -1,0 +1,37 @@
+#ifndef FILE_TABLES_H
+#define FILE_TABLES_H
+
+#include "stdint.h"
+
+typedef struct {
+    uint32_t tag;
+    uint32_t checksum;
+    uint32_t offset;
+    uint32_t length;
+} __attribute__((packed)) table_data_t;
+
+
+typedef struct {
+    uint16_t num_tables;
+    table_data_t* tables;
+} font_data_t;
+
+font_data_t font_data;
+
+
+typedef struct cmap_table_t {
+    uint16_t platform_id;
+    uint16_t encoding_id;
+    uint32_t offset;
+} __attribute__((packed)) cmap_table_t;
+
+typedef struct cmap_subtable_t {
+    uint16_t format;
+    uint16_t lenght;
+    uint16_t seg_count;
+    uint16_t* end_code;
+    uint16_t padding;
+    uint16_t* start_code;
+} __attribute__((packed)) cmap_subtable_t;
+
+#endif //FILE_TABLES_H

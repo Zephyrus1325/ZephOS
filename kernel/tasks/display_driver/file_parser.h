@@ -9,5 +9,7 @@ int16_t read_int16(FILE* file);
 uint16_t read_uint16(FILE* file);
 int32_t read_int32(FILE* file);
 uint32_t read_uint32(FILE* file);
+void fskip(size_t s, FILE* file);
+void fsetp(size_t p, FILE* file);
 
 #endif

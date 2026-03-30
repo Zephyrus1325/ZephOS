@@ -95,15 +95,15 @@ int k_fs_init(void) {
     uint8_t sector_buffer[512];
 
     if (k_sd_init() != 0) {
-        k_uart_print("[FILESYSTEM]: SD DRIVER ERROR\r\n");
+        k_uart_print_no_interrupt("[FILESYSTEM]: SD DRIVER ERROR\r\n");
         return -1;
     }
 
-    if (k_sd_read_sector(0, sector_buffer) != 0){k_uart_print("[FILESYSTEM]: SD SECTOR READ FAILED [!!!]\n\r"); return -1;}
+    if (k_sd_read_sector(0, sector_buffer) != 0){k_uart_print_no_interrupt("[FILESYSTEM]: SD SECTOR READ FAILED [!!!]\n\r"); return -1;}
     // Checar MBR
     if (sector_buffer[450] == 0x0C || sector_buffer[450] == 0x0B) {
         partition_begin_lba = *(uint32_t*)&sector_buffer[454];
-        if (k_sd_read_sector(partition_begin_lba, sector_buffer) != 0){k_uart_print("[FILESYSTEM]: SD SECTOR READ FAILED [!!!]\n\r"); return -1;}
+        if (k_sd_read_sector(partition_begin_lba, sector_buffer) != 0){k_uart_print_no_interrupt("[FILESYSTEM]: SD SECTOR READ FAILED [!!!]\n\r"); return -1;}
     } else {
         partition_begin_lba = 0;
     }
@@ -113,7 +113,7 @@ int k_fs_init(void) {
     }
 
     if (bpb.boot_signature != 0x29) {
-        k_uart_print("[FILESYSTEM]: INVALID FAT32\r\n");
+        k_uart_print_no_interrupt("[FILESYSTEM]: INVALID FAT32\r\n");
         return -1;
     }
     return 0;

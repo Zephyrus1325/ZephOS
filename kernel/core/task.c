@@ -30,7 +30,7 @@ volatile uint32_t _sp_irq = (uint32_t)&__stack_irq_top;
 */
 void k_task_init(tcb_t *tcb, uint32_t id, void (*task_func)(void), uint32_t* stack_base, uint32_t stack_size) {
 
-    uint32_t* sp = (uint32_t)&stack_base[stack_size];        // Aponta para o final do stack
+    uint32_t* sp = &stack_base[stack_size];        // Aponta para o final do stack
     *(--sp) = (uint32_t) task_func;                          // Aponta para o PC da task desejada
 
 

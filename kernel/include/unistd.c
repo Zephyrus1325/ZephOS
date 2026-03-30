@@ -57,3 +57,7 @@ int32_t spawn(void (*func)(void), size_t stack_size){
 int getpid(void) {
     return _syscall(SYS_GETPID, 0, 0, 0);
 }
+
+void* malloc(size_t size){
+    return (void*)_syscall(SYS_MALLOC, (uint32_t)size, 0, 0);
+}

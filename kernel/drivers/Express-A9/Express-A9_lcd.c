@@ -37,9 +37,7 @@ void put_pixel(int x, int y, uint32_t color) {
 #include "drivers/interrupts.h"
 
 void clear_screen(uint32_t color) {
-    //k_enable_interrupts();
-    for (int i = 0; i < LCD_WIDTH * LCD_HEIGHT; i++) { 
+    for (int i = 0; i < (LCD_WIDTH * LCD_HEIGHT); i++) { 
         framebuffer[i] = color;
     }
-    //k_disable_interrupts();
 }

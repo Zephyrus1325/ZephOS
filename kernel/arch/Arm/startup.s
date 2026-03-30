@@ -31,6 +31,10 @@ _start:
     MSR cpsr_c, #0xD7            // Entra no modo ABT
     LDR sp, =__stack_abt_top     // Define o topo da RAM para a pilha do abort
 
+    MSR cpsr_c, #0xDB            // Entra no modo UNDEF
+    LDR sp, =__stack_abt_top     // Define o topo da RAM para a pilha do undef
+    
+
     /* Configurar pilha para modo Supervisor (Kernel) */
     MSR cpsr_c, #0xD3            // Entra no modo SVC
     LDR sp, =__stack_svc_top     // Define o topo da RAM para a pilha do Kernel
@@ -43,6 +47,17 @@ zero_loop:
     CMP r0, r1
     STRLT r2, [r0], #4
     BLT zero_loop
+
+
+    // Habilitar acesso aos coprocessadores CP10 e CP11 (VFP/NEON)
+    mrc p15, 0, r0, c1, c0, 2    // Lê CPACR (Coprocessor Access Control Register)
+    orr r0, r0, #0x00F00000      // Habilita acesso Full para CP10 e CP11
+    mcr p15, 0, r0, c1, c0, 2    // Escreve de volta
+    isb                          // Instruction Synchronization Barrier
+
+    // Habilitar a unidade VFP/NEON propriamente dita
+    mov r0, #0x40000000          // Seta o bit EN no FPEXC
+    vmsr fpexc, r0
 
     BL main                      // Rodar a Main em C
     B .                          // Caso a Main retorne, trava em loop infinito

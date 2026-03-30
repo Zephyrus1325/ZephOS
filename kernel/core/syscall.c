@@ -71,7 +71,7 @@ void k_svc_dispatcher(uint32_t id, uint32_t arg1, uint32_t arg2, uint32_t arg3, 
             // Se usarmos 4 args no assembly, podemos passar o FILE* via pilha ou R4.
             // Para seguir o padrão ANSI perfeitamente, o fread precisaria de 5 args (ID + 4).
             // SOLUÇÃO: Passamos (size * nmemb) consolidado no arg2 e o FILE* no arg3.
-            context->r0 = (int32_t)k_fread((void*)arg1, 1, (size_t)arg2, (FILE*)arg3);
+            context->r0 = (uint32_t)k_fread((void*)arg1, 1, (size_t)arg2, (FILE*)arg3);
             return;
 
         case SYS_REMOVE:
