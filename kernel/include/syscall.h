@@ -35,6 +35,8 @@ size_t  fread(void* ptr, size_t size, size_t nmemb, FILE* stream);
 int     fgetc(FILE* stream);
 char*   fgets(char* s, int n, FILE* stream);
 int     remove(const char* filename);
+void    fskip(size_t s, FILE* file);
+void    fsetp(size_t p, FILE* file);
 
 // I/O de Console
 int     printf(const char* format, ...);

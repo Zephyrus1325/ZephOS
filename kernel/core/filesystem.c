@@ -291,3 +291,28 @@ int k_remove(const char *filename) {
     // Arquivo para excluir nao encontrado
     return -3;
 }
+
+void sync_file_cluster(FILE* fp) {
+    uint32_t cluster_index = fp->fpos / (bpb.sectors_per_cluster * 512);
+    uint32_t target_cluster = fp->first_cluster; // Você precisa guardar o cluster inicial no FILE
+
+    // Caminha na FAT até o cluster desejado
+    for (uint32_t i = 0; i < cluster_index; i++) {
+        target_cluster = get_next_cluster(target_cluster);
+        if (target_cluster >= 0x0FFFFFF8) {
+            fp->eof = true;
+            break;
+        }
+    }
+    fp->current_cluster = target_cluster;
+}
+
+void fskip(size_t s, FILE* file){
+    file->fpos += s;
+    sync_file_cluster(file);
+}
+
+void fsetp(size_t p, FILE* file){
+    file->fpos = p;
+    sync_file_cluster(file);
+}

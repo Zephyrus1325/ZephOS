@@ -16,14 +16,16 @@ int32_t get_table_id(font_data_t* font, const char* table_name){
     return -1;
 }
 
+uint16_t get_glyph_index(){
+
+}
+
 void text_init(){
     FILE* font = fopen("courier.ttf", "r");
-
     uint32_t version = read_uint32(font); // sfntVersion
     font_data.num_tables = read_uint16(font); // NumTables
     font_data.tables = malloc(sizeof(table_data_t) * font_data.num_tables);
     fskip(6, font);
-
     for(int i = 0; i < font_data.num_tables; i++){
         font_data.tables[i].tag = read_uint32(font);
         font_data.tables[i].checksum = read_uint32(font);
@@ -64,24 +66,72 @@ void text_init(){
     // Leitura do "cmap"
     fsetp(font_data.tables[id_cmap].offset, font);
 
-    printf("fp: 0x%x\n\r", font->fpos);
-    
-    uint16_t v = read_int16(font);
-    printf("fp: 0x%x | V = 0x%x\n\r", font->fpos, v);
-    
+    uint16_t v = read_uint16(font);
     uint16_t num_cmap_tables = read_uint16(font);
-    printf("fp: 0x%x | numtable = 0x%x\n\r", font->fpos, num_cmap_tables);
     
-    //cmap_table_t* cmap_tables = (cmap_table_t*)malloc(sizeof(cmap_table_t) * num_cmap_tables);
+    cmap_table_t cmap_table;
 
-    printf("Version: %x | num tables: %x\n\r", (uint32_t)v, (uint32_t)num_cmap_tables);
+    // Preenche as tabelas
+    for(int i = 0; i < num_cmap_tables; i++){
+        cmap_table.platform_id = read_uint16(font);
+        if(cmap_table.platform_id == 0){        // ID 0 = UNICODE
+            cmap_table.encoding_id = read_uint16(font);
+            cmap_table.offset = read_uint32(font);
+            break;                              // Encontrou a tabela, ignora o resto
+        } else {
+            fskip(6, font);
+        }
+    }
 
-    //for(int i = 0; i < num_cmap_tables; i++){
-    //    cmap_tables[i].platform_id = read_uint16(font);
-    //    cmap_tables[i].encoding_id = read_uint16(font);
-    //    cmap_tables[i].offset = read_uint32(font);
-    //    //printf("PlatformID: %d | encodingID: %d | offset: 0x%x\n\r", cmap_tables[i].platform_id,cmap_tables[i].encoding_id,cmap_tables[i].offset);
-    //}
+    fsetp(font_data.tables[id_cmap].offset + cmap_table.offset, font);     // Vai para a subtabela de fontes
+    
+    cmap_subtable_t cmap_subtable;
+    cmap_subtable.format = read_uint16(font);
+    cmap_subtable.length = read_uint16(font);
+    fskip(2, font);     // Language
+    cmap_subtable.seg_count = read_uint16(font); // 2 * segCount
+    fskip(6, font);
+
+    // Aloca os elementos para os ranges
+    cmap_subtable.end_code = (uint16_t*) malloc(cmap_subtable.seg_count);
+    cmap_subtable.start_code = (uint16_t*) malloc(cmap_subtable.seg_count);
+    cmap_subtable.id_delta = (int16_t*) malloc(cmap_subtable.seg_count);
+
+    // Preenche os ranges
+    // End code
+    for(int i = 0; i < cmap_subtable.seg_count/2; i++){
+        cmap_subtable.end_code[i] = read_uint16(font);
+    }
+
+    fskip(2, font);     // Padding (0)
+    // Start code
+    for(int i = 0; i < cmap_subtable.seg_count/2; i++){
+        cmap_subtable.start_code[i] = read_uint16(font);
+    }
+
+    // Delta
+    for(int i = 0; i < cmap_subtable.seg_count/2; i++){
+        cmap_subtable.id_delta[i] = read_int16(font);
+    }
+
+    char c = 'A';
+
+    uint16_t glyph_index = 0;
+
+    for(int i = 0; i < cmap_subtable.seg_count/2; i++){
+        if((cmap_subtable.start_code[i] >= c) && (c <= cmap_subtable.end_code[i])){
+            glyph_index = c + cmap_subtable.id_delta[i];
+            break;
+        }
+    }
+    
+    
+
+
+
+
+
+
 
     fclose(font);
 }

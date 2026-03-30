@@ -27,11 +27,13 @@ typedef struct cmap_table_t {
 
 typedef struct cmap_subtable_t {
     uint16_t format;
-    uint16_t lenght;
+    uint16_t length;
     uint16_t seg_count;
     uint16_t* end_code;
-    uint16_t padding;
     uint16_t* start_code;
+    int16_t* id_delta;
+    uint16_t* id_range_offset;
+    uint16_t* glyph_id_array;
 } __attribute__((packed)) cmap_subtable_t;
 
 #endif //FILE_TABLES_H

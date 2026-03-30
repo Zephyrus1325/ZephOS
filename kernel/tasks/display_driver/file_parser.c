@@ -36,14 +36,3 @@ uint32_t read_uint32(FILE* file){
     fread(&out, sizeof(out), 1, file);
     return ((out >> 24) & (0xff << 0)) + ((out >> 8) & (0xff << 8)) + ((out << 8) & (0xff << 16)) + ((out << 24) & (0xff << 24));
 }
-
-void fskip(size_t s, FILE* file){
-    uint8_t temp;
-    for(int i = 0; i < s; i++){
-        fread(&temp, sizeof(temp), 1, file);
-    }
-}
-
-void fsetp(size_t p, FILE* file){
-    file->fpos = p;
-}
