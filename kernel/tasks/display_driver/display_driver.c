@@ -4,6 +4,8 @@
 #include "drivers/lcd.h"
 #include "text_render.h"
 
+#include "draw.h"
+
 /*
  *  Task Responsável por criar todo os gráficos básicos do sistema
  *  Boa parte das coisas do so devem ser um service para esta task

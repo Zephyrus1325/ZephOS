@@ -16,9 +16,7 @@ int32_t get_table_id(font_data_t* font, const char* table_name){
     return -1;
 }
 
-uint16_t get_glyph_index(){
 
-}
 
 void text_init(){
     FILE* font = fopen("courier.ttf", "r");
@@ -52,10 +50,10 @@ void text_init(){
     uint16_t head_flags = read_uint16(font);
     uint16_t units_per_em = read_uint16(font);
     fskip(16, font);
-    int16_t xMin = read_int16(font);
-    int16_t yMin = read_int16(font);
-    int16_t xMax = read_int16(font);
-    int16_t yMax = read_int16(font);
+    int16_t font_xMin = read_int16(font);
+    int16_t font_yMin = read_int16(font);
+    int16_t font_xMax = read_int16(font);
+    int16_t font_yMax = read_int16(font);
 
     fskip(6, font);
 
@@ -114,6 +112,8 @@ void text_init(){
         cmap_subtable.id_delta[i] = read_int16(font);
     }
 
+
+    // Código PER-LETRA
     char c = 'A';
 
     uint16_t glyph_index = 0;
@@ -124,7 +124,33 @@ void text_init(){
             break;
         }
     }
+
+    size_t glyph_offset;
     
+    if(index_to_loc_format){
+        fsetp(font_data.tables[id_loca].offset + (sizeof(uint32_t) * glyph_index), font);
+        glyph_offset = read_uint32(font);
+        
+    } else {
+        fsetp(font_data.tables[id_loca].offset + (sizeof(uint16_t) * glyph_index), font);
+        glyph_offset = read_uint16(font);
+    }
+
+    // Vai pra tabela que desenha o glifo em si
+    //fsetp(font_data.tables[id_glyf].offset + glyph_offset, font);
+    fsetp(font_data.tables[id_glyf].offset, font);
+
+    int16_t num_contours = read_int16(font);
+    int16_t xMin = read_int16(font);
+    int16_t yMin = read_int16(font);
+    int16_t xMax = read_int16(font);
+    int16_t yMax = read_int16(font);
+
+    //printf("NumCont: %d | xMin: %d | xMax: %d | yMin: %d | yMax: %d\n\r", (int32_t)num_contours, (int32_t)xMin, (int32_t)xMax, (int32_t)yMin, (int32_t)yMax);
+
+    for(int i = 0; i < num_contours; i++){
+
+    }
     
 
 
@@ -138,6 +164,6 @@ void text_init(){
 
 
 
-void draw_char(){
+void draw_char(uint16_t x, uint16_t y, char c){
 
 }

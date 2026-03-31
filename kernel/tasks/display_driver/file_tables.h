@@ -36,4 +36,11 @@ typedef struct cmap_subtable_t {
     uint16_t* glyph_id_array;
 } __attribute__((packed)) cmap_subtable_t;
 
+typedef struct glyph_t {
+    uint16_t* end_point_index;
+    uint8_t* flags;
+    uint8_t* x;
+    uint8_t* y;
+} __attribute__((packed)) glyph_t;
+
 #endif //FILE_TABLES_H
