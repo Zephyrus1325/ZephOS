@@ -43,4 +43,14 @@ typedef struct glyph_t {
     uint8_t* y;
 } __attribute__((packed)) glyph_t;
 
+/*
+ *  DADOS DA FONTE:
+ *  font_t {
+ *      - character mapping
+ *      - glyph data
+ *      - horizontal data
+ * 
+ * }
+ */
+
 #endif //FILE_TABLES_H

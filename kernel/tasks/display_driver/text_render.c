@@ -4,6 +4,8 @@
 #include "include/syscall.h"
 #include "file_tables.h"
 
+#include "draw.h"
+
 // Return ID if successful
 // Return -1 if not successful
 int32_t get_table_id(font_data_t* font, const char* table_name){
@@ -112,8 +114,13 @@ void text_init(){
         cmap_subtable.id_delta[i] = read_int16(font);
     }
 
+    fclose(font);
+}
 
-    // Código PER-LETRA
+
+
+void draw_char(uint16_t x, uint16_t y, char c, font_t font){
+    
     char c = 'A';
 
     uint16_t glyph_index = 0;
@@ -137,8 +144,8 @@ void text_init(){
     }
 
     // Vai pra tabela que desenha o glifo em si
-    //fsetp(font_data.tables[id_glyf].offset + glyph_offset, font);
-    fsetp(font_data.tables[id_glyf].offset, font);
+    fsetp(font_data.tables[id_glyf].offset + glyph_offset, font);
+    //fsetp(font_data.tables[id_glyf].offset, font);
 
     int16_t num_contours = read_int16(font);
     int16_t xMin = read_int16(font);
@@ -148,22 +155,8 @@ void text_init(){
 
     //printf("NumCont: %d | xMin: %d | xMax: %d | yMin: %d | yMax: %d\n\r", (int32_t)num_contours, (int32_t)xMin, (int32_t)xMax, (int32_t)yMin, (int32_t)yMax);
 
-    for(int i = 0; i < num_contours; i++){
-
-    }
-    
-
-
-
-
-
-
-
-    fclose(font);
-}
-
-
-
-void draw_char(uint16_t x, uint16_t y, char c){
-
+    //for(int i = 0; i < num_contours; i++){
+    //
+    //}
+    draw_rect(xMin + 50, yMin + 20, xMax-xMin, yMax-yMin, 0xFF0000);
 }
