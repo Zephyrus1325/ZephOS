@@ -1,31 +1,92 @@
 #ifndef TEXT_RENDERER_H
 #define TEXT_RENDERER_H
 
-typedef struct{
-    struct cursor{
-        uint32_t x;
-        uint32_t y;
+#include <stdint.h>
+
+typedef struct {
+    int16_t num_contours;
+    float x_min;
+    float y_min;
+    float x_max;
+    float y_max;
+
+    union {
+        struct {
+            uint16_t* end_points;
+            uint8_t* flags;
+            void* x;
+            void* y;
+        } simple;
+        
+        struct {
+            uint16_t flags;
+            uint16_t glyph_index;
+            int16_t arg1;
+            int16_t arg2;
+        } compound;
     };
+} glyf_t;
+struct longHorMetric_t{
+    uint16_t advance_width;
+    int16_t left_side_bearing;
+}longHorMetric;
+
+
+typedef struct font_t{
+
+    struct meta_t {
+        uint32_t color;
+        float size;
+        struct cursor{
+            uint32_t x;
+            uint32_t y;
+        } cursor;
+    } meta;
     
-    struct cmap_subtable {
-    uint16_t format;
-    uint16_t length;
-    uint16_t seg_count;
-    uint16_t* end_code;
-    uint16_t* start_code;
-    int16_t* id_delta;
-    uint16_t* id_range_offset;
-    uint16_t* glyph_id_array;
-    } __attribute__((packed));
+    struct cmap_t {
+        uint16_t seg_countX2;
+        uint16_t* end_code;
+        uint16_t* start_code;
+        uint16_t* id_delta;
+        uint16_t* id_range_offset;
+        uint16_t* glyph_index;
+    } cmap;  
 
-    struct glyph {
-    uint16_t* end_point_index;
-    uint8_t* flags;
-    uint8_t* x;
-    uint8_t* y;
-    } __attribute__((packed));
+    glyf_t* glyf;
+    
+    struct head_t{
+        uint16_t flags;
+        uint16_t units_per_em;
+        int16_t x_min;
+        int16_t y_min;
+        int16_t x_max;
+        int16_t y_max;
+        int16_t index_to_loc_format;
+    } head;
 
-}font_t;
+
+    struct hhea_t{
+        uint16_t num_hor_metrics
+    } hhea;
+
+    struct htmx_t {
+        struct longHorMetric* h_metrics;
+        int16_t* left_side_bearing;
+    } hmtx;
+
+    struct loca_t{
+        uint32_t* offsets;
+    } loca;
+
+    struct  maxp_t{
+        uint16_t num_glyphs;
+        uint16_t max_points;
+        uint16_t max_countours;
+        uint16_t max_component_points;
+        uint16_t max_component_contours;
+    } maxp;
+
+} font_t;
 
 
 void text_init();
