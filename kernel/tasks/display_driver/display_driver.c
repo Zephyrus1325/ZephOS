@@ -18,8 +18,6 @@ static void main(){
     get_font("courier.ttf", console_font);
     
     clear_screen(0);
-    
-    draw_text("Hello World!", console_font, 0xFFFFFF);
 
     uint32_t color = 0;
     for(int y = 0; y < 480; y++){
@@ -28,6 +26,8 @@ static void main(){
             put_pixel(x, y, color);
         }
     }
+
+    draw_text("Hello World!", console_font, 0xFFFFFF);
 
     while(1){
         msleep(10000);

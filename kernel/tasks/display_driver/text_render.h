@@ -28,12 +28,21 @@ typedef struct {
 } glyf_t;
 
 typedef struct {
+    uint32_t width;
+    uint32_t height;
+    uint32_t font_size;
+    uint8_t* bitmap;
+} glyph_cache_t;
+
+typedef struct {
     uint16_t advance_width;
     int16_t left_side_bearing;
 } longHorMetric_t;
 
 
 typedef struct {
+
+    uint8_t* raw_file;
 
     struct meta_t {
         uint32_t color;
@@ -53,7 +62,13 @@ typedef struct {
         uint16_t* glyph_index;
     } cmap;  
 
-    glyf_t* glyf;
+
+    struct glyphs_t {
+        uint32_t table_offset;  // Offset da tabela de glifos em relação ao arquivo
+        uint16_t cached_glyphs;
+        glyf_t* glyf;
+    } glyf;
+    
     
     struct head_t{
         uint16_t flags;

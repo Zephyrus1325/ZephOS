@@ -295,14 +295,14 @@ int k_remove(const char *filename) {
     return -3;
 }
 
-#include "include/syscall.h"
 
 void sync_file_cluster(FILE* fp) {
     uint32_t cluster_index = fp->fpos / (bpb.sectors_per_cluster * 512);
-    uint32_t target_cluster = fp->first_cluster; // Você precisa guardar o cluster inicial no FILE
 
     // Caminha na FAT até o cluster desejado
-    if(fp->current_cluster_index == cluster_index){
+    if(fp->current_cluster_index != cluster_index){ // Se já estiver no mesmo cluster, não precisa atualizar
+        uint32_t target_cluster = fp->first_cluster;
+
         for (uint32_t i = 0; i < cluster_index; i++) {
         target_cluster = get_next_cluster(target_cluster);
             if (target_cluster >= 0x0FFFFFF8) {
@@ -310,12 +310,9 @@ void sync_file_cluster(FILE* fp) {
                 break;
             }
         }
-        k_uart_printf("cluster: %d\n\r", fp->current_cluster_index);
         fp->current_cluster_index = cluster_index;
         fp->current_cluster = target_cluster;
     }
-    
-    
 }
 
 void fskip(size_t s, FILE* file){
