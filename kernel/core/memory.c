@@ -34,14 +34,18 @@ void* k_malloc(size_t size) {
     while (curr) {
         if (curr->is_free && curr->size >= size) {
             
-            // Se o bloco for muito maior que o necessário, dividi-lo (Split)
-            if (curr->size > (size + HEADER_SIZE + 8)) {
-                block_header_t *next_block = (block_header_t *)((uint8_t *)curr + HEADER_SIZE + size);
-                next_block->size = curr->size - size - HEADER_SIZE;
+            if (curr->size > (size + sizeof(block_header_t) + 8)) {
+                // Garanta que o avanço seja múltiplo de 8
+                size_t total_offset = sizeof(block_header_t) + size;
+                            
+                block_header_t *next_block = (block_header_t *)((uint8_t *)curr + total_offset);
+                            
+                // ATENÇÃO: Aqui curr->size ainda é o tamanho ANTIGO (grande)
+                next_block->size = curr->size - total_offset; 
                 next_block->is_free = 1;
                 next_block->next = curr->next;
-
-                curr->size = size;
+                            
+                curr->size = size; // Agora atualiza o tamanho do bloco alocado
                 curr->next = next_block;
             }
 

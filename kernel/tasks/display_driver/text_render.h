@@ -5,17 +5,17 @@
 
 typedef struct {
     int16_t num_contours;
-    float x_min;
-    float y_min;
-    float x_max;
-    float y_max;
+    int16_t x_min;
+    int16_t y_min;
+    int16_t x_max;
+    int16_t y_max;
 
     union {
         struct {
             uint16_t* end_points;
             uint8_t* flags;
-            void* x;
-            void* y;
+            int16_t* x;
+            int16_t* y;
         } simple;
         
         struct {
@@ -26,17 +26,18 @@ typedef struct {
         } compound;
     };
 } glyf_t;
-struct longHorMetric_t{
+
+typedef struct {
     uint16_t advance_width;
     int16_t left_side_bearing;
-}longHorMetric;
+} longHorMetric_t;
 
 
-typedef struct font_t{
+typedef struct {
 
     struct meta_t {
         uint32_t color;
-        float size;
+        uint32_t size;
         struct cursor{
             uint32_t x;
             uint32_t y;
@@ -66,11 +67,11 @@ typedef struct font_t{
 
 
     struct hhea_t{
-        uint16_t num_hor_metrics
+        uint16_t num_hor_metrics;
     } hhea;
 
     struct htmx_t {
-        struct longHorMetric* h_metrics;
+        longHorMetric_t* h_metrics;
         int16_t* left_side_bearing;
     } hmtx;
 
@@ -89,13 +90,11 @@ typedef struct font_t{
 } font_t;
 
 
-void text_init();
-
 // Adições novas (a implementar)
-void get_font(const char* file_name, font_t font);      // Carrega um arquivo de fonte e guarda seus dados
+void get_font(const char* file_name, font_t* font);      // Carrega um arquivo de fonte e guarda seus dados
 void set_cursor(uint32_t x, uint32_t y);                // Coloca o cursor no pixel superior esquerdo do texto
-void set_font_size(float font_size, font_t font);       // Define o tamanho da fonte (em pixels????)
-void draw_text(const char* str, font_t font, uint32_t color);   // Desenha o texto na tela, utilizando uma fonte, na posição dada pelo cursor
+void set_font_size(float font_size, font_t* font);       // Define o tamanho da fonte (em pixels????)
+void draw_text(const char* str, font_t* font, uint32_t color);   // Desenha o texto na tela, utilizando uma fonte, na posição dada pelo cursor
 
 
 

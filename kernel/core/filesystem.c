@@ -139,6 +139,7 @@ FILE* k_fopen(const char* filename, const char* mode) {
             fp->size = entries[i].file_size;
             fp->first_cluster = (entries[i].cluster_high << 16) | entries[i].cluster_low;
             fp->current_cluster = fp->first_cluster;
+            fp->current_cluster_index = 0;
             fp->fpos = 0;
             fp->eof = false;
             return fp;
@@ -181,11 +182,13 @@ size_t k_fread(void* ptr, size_t size, size_t nmemb, FILE* fp) {
         // Se chegamos ao fim do cluster, pula para o próximo
         if (fp->fpos % (bpb.sectors_per_cluster * 512) == 0) {
             fp->current_cluster = get_next_cluster(fp->current_cluster);
+            fp->current_cluster_index++;
             if (fp->current_cluster >= 0x0FFFFFF8) {
                 fp->eof = true;
                 break;
             }
         }
+        
     }
 
     return bytes_read;
@@ -292,19 +295,27 @@ int k_remove(const char *filename) {
     return -3;
 }
 
+#include "include/syscall.h"
+
 void sync_file_cluster(FILE* fp) {
     uint32_t cluster_index = fp->fpos / (bpb.sectors_per_cluster * 512);
     uint32_t target_cluster = fp->first_cluster; // Você precisa guardar o cluster inicial no FILE
 
     // Caminha na FAT até o cluster desejado
-    for (uint32_t i = 0; i < cluster_index; i++) {
+    if(fp->current_cluster_index == cluster_index){
+        for (uint32_t i = 0; i < cluster_index; i++) {
         target_cluster = get_next_cluster(target_cluster);
-        if (target_cluster >= 0x0FFFFFF8) {
-            fp->eof = true;
-            break;
+            if (target_cluster >= 0x0FFFFFF8) {
+                fp->eof = true;
+                break;
+            }
         }
+        k_uart_printf("cluster: %d\n\r", fp->current_cluster_index);
+        fp->current_cluster_index = cluster_index;
+        fp->current_cluster = target_cluster;
     }
-    fp->current_cluster = target_cluster;
+    
+    
 }
 
 void fskip(size_t s, FILE* file){

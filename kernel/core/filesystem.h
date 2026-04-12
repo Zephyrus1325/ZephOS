@@ -57,6 +57,7 @@ typedef struct {
     uint32_t size;
     uint32_t first_cluster;
     uint32_t current_cluster; // Cluster onde o cursor está agora
+    uint32_t current_cluster_index; // Endereço do cluster atual
     uint32_t fpos;            // Posição global no arquivo (0 a size)
     uint32_t sector_in_cluster; // Qual setor do cluster atual estamos
     uint8_t  buffer[512];     // Buffer de setor para otimizar pequenas leituras

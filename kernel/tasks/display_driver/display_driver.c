@@ -13,9 +13,14 @@
 
 static void main(){
     
-    text_init();
+    font_t* console_font = (font_t*) malloc(sizeof(font_t));
+    
+    get_font("courier.ttf", console_font);
+    
     clear_screen(0);
     
+    draw_text("Hello World!", console_font, 0xFFFFFF);
+
     uint32_t color = 0;
     for(int y = 0; y < 480; y++){
         for(int x = 0; x < 640; x++){
