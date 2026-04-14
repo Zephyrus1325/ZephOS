@@ -1,4 +1,4 @@
 clear
 make
-qemu-system-arm -M vexpress-a9 -m 512M -kernel kernel.elf -serial stdio -monitor vc -drive file=disk.img,if=sd,format=raw -nographic
+qemu-system-arm -M vexpress-a9 -m 512M -kernel kernel.elf -serial stdio -monitor vc -drive file=disk.img,if=sd,format=raw
 rem -S -gdb tcp::1234

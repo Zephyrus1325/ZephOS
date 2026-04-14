@@ -175,6 +175,9 @@ void get_font(const char* file_name, font_t* font){
     id =  get_table_id("hmtx", table_id, num_tables);
     file_ptr = table_offset[id];
 
+    font->hmtx.h_metrics = malloc(sizeof(longHorMetric_t) * font->hhea.num_hor_metrics);
+    font->hmtx.left_side_bearing =  malloc(sizeof(uint32_t) * (font->maxp.num_glyphs - font->hhea.num_hor_metrics));
+
     for(int i = 0; i < font->hhea.num_hor_metrics; i++){
         font->hmtx.h_metrics[i].advance_width = read_uint16(font->raw_file, &file_ptr); 
         font->hmtx.h_metrics[i].left_side_bearing = read_int16(font->raw_file, &file_ptr); 
@@ -192,17 +195,17 @@ void get_font(const char* file_name, font_t* font){
     font->loca.offsets = (uint32_t*) malloc(font->maxp.num_glyphs * sizeof(uint32_t));
     for(int i = 0; i < font->maxp.num_glyphs + 1; i++){
         if(font->head.index_to_loc_format){ 
-            font->loca.offsets[i] = read_uint16(font->raw_file, &file_ptr) * 2; // short offsets
+            font->loca.offsets[i] = read_uint32(font->raw_file, &file_ptr); // short offsets
         } else {    
-            font->loca.offsets[i] = read_uint32(font->raw_file, &file_ptr);     // long offsets
+            font->loca.offsets[i] = read_uint16(font->raw_file, &file_ptr) * 2;     // long offsets
         }
     }       
 
     // Coloca o offset da tabela de glifos para facilitar a vida :D
-    font->glyf.table_offset = get_table_id("glyf", table_id, num_tables);
+    font->glyf.table_offset = table_offset[get_table_id("glyf", table_id, num_tables)];
 
     font->meta.cursor.x = 10;
-    font->meta.cursor.y = 10;
+    font->meta.cursor.y = 70;
 
 }
 
@@ -215,6 +218,16 @@ void set_cursor(uint32_t x, uint32_t y){
 void set_font_size(float font_size, font_t* font){
 
 }   
+
+void render_char(int16_t x0, int16_t y0, int16_t width, int16_t height, uint8_t* glyph_data, uint32_t color){
+    for(int16_t y = y0; y < y0 + height; y++){
+        for(int16_t x = x0; x < x0 + width; x++){
+            // Rodar codigo abaixo para cada pixel dentro do caracter
+
+        }
+    }
+}
+
 
 // Desenha o texto na tela, utilizando uma fonte, na posição dada pelo cursor
 void draw_char(const char c, font_t* font, uint32_t color){
@@ -230,12 +243,10 @@ void draw_char(const char c, font_t* font, uint32_t color){
         }                                                               // Se não, desenha o caracter de desconhecido
     }
    
-    uint8_t* glyph_data = font->raw_file + font->loca.offsets[glyph_index];  // Inicia um array no local da fonte
-    printf("GF: %d | offset: %d\n\r")
+    uint8_t* glyph_data = font->raw_file + font->glyf.table_offset + font->loca.offsets[glyph_index];  // Inicia um array no local da fonte
+
     uint32_t glyph_reader_index = 0;
     int16_t num_contours = read_int16(glyph_data, &glyph_reader_index);    
-    
-    printf("cont: %d\n\r", num_contours);
 
     if(num_contours <= 0){
         // Fontes compostas
@@ -248,16 +259,32 @@ void draw_char(const char c, font_t* font, uint32_t color){
     int16_t x_max = read_int16(glyph_data, &glyph_reader_index);
     int16_t y_max = read_int16(glyph_data, &glyph_reader_index);
     
-    printf("char: 0x%x | index: %d\n\r", c, glyph_index);
-    printf("%d | %d | %d | %d\n\r", x_min, y_min, x_max, y_max);
-    printf("units per em: %d\n\r", font->head.units_per_em);
-    uint16_t font_size = 32; // 32 px
+    uint16_t font_size = 64; // 32 px
     
-    printf("%d | %d | %d | %d\n\r",font->meta.cursor.x + (x_min * font_size / font->head.units_per_em), font->meta.cursor.y + (y_min * font_size / font->head.units_per_em), (x_max-x_min) * font_size/font->head.units_per_em, (y_max-y_min) * font_size/font->head.units_per_em, 0xFFFFFF);
-    printf("%d %d", ((x_max - x_min)*font_size)/font->head.units_per_em, ((y_max - y_min)*font_size)/font->head.units_per_em);
+    uint16_t advance_width;
+    int16_t left_side_bearing;
+
+    if(glyph_index < font->hhea.num_hor_metrics){
+        advance_width = font->hmtx.h_metrics[glyph_index].advance_width;
+        left_side_bearing = font->hmtx.h_metrics[glyph_index].left_side_bearing;
+    } else {
+        advance_width = font->hmtx.h_metrics[font->hhea.num_hor_metrics - 1].advance_width;
+        left_side_bearing = font->hmtx.left_side_bearing[glyph_index - font->hhea.num_hor_metrics];
+    }
+
+    int16_t draw_x = font->meta.cursor.x + (left_side_bearing * font_size / font->head.units_per_em) + (x_min * font_size / font->head.units_per_em);
+    int16_t draw_y = font->meta.cursor.y - ((y_max * font_size) / font->head.units_per_em);
+    int16_t width = (x_max-x_min) * font_size/font->head.units_per_em;
+    int16_t height = (y_max-y_min) * font_size/font->head.units_per_em;
+
+    draw_rect(draw_x, draw_y, width, height, 0xFFFFFF);
+    font->meta.cursor.x += advance_width * font_size / font->head.units_per_em;
+    // printf("%d %d", ((x_max - x_min)*font_size)/font->head.units_per_em, ((y_max - y_min)*font_size)/font->head.units_per_em);
 }
 
 // Desenha o texto na tela, utilizando uma fonte, na posição dada pelo cursor
 void draw_text(const char* str, font_t* font, uint32_t color){
-    draw_char('H', font, color);
+    for(int i = 0; str[i] != '\0'; i++){
+        draw_char(str[i], font, color);
+    }
 }
